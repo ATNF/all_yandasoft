@@ -45,7 +45,7 @@ build_docker_image:
       fi
     - >
       docker build -t $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/all_yandasoft:$DOCKER_TAG
-      --build-arg BRANCH=${CI_COMMIT_BRANCH} -f .gitlab-docker .
+      --build-arg BRANCH=${YANDASOFT_BRANCH} -f .gitlab-docker .
     - docker save $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/cbf_sdp_emulator:$DOCKER_TAG > docker_image.tar
   artifacts:
     paths:
