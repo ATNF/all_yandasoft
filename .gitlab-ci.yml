@@ -13,7 +13,6 @@ variables:
 
 stages:
   - build_docker_image
-  - deploy
 
 .common_docker:
   image: docker:stable
@@ -46,21 +45,6 @@ build_docker_image:
     - >
       docker build -t $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/all_yandasoft:$DOCKER_TAG
       --build-arg BRANCH=${YANDASOFT_BRANCH} -f .gitlab-docker .
-    - docker save $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/all_yandasoft:$DOCKER_TAG > docker_image.tar
-  artifacts:
-    paths:
-      - docker_image.tar
-
-publish_docker_image:
-  stage: deploy
-  extends: 
-    - .common
-    - .common_docker
-  dependencies:
-    - build_docker_image
-  script:
-    - image_id=`docker load < docker_image.tar | sed -n '/Loaded image:/ { s/Loaded image://p }'`
-    - echo $image_id
-    - docker push $image_id
+    - docker push $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/all_yandasoft:$DOCKER_TAG 
 
 
