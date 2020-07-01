@@ -34,7 +34,7 @@
 # When a specific machine target is chosen, MPI target is ignored.
 # Choose one or both of this list of target.
 machine_targets = ["generic", "galaxy"]
-# machine_targets = ["galaxy"]
+# machine_targets = ["generic"]
 
 # Set MPI implementations for generic machine in the list below.
 # Note that a specific machine requires no MPI specification.
@@ -47,8 +47,8 @@ machine_targets = ["generic", "galaxy"]
 # When they are not, the default version from the base OS will be installed
 # using the simplest method (apt-get install).
 # Choose a subset (or all) of this complete list of targets:
-mpi_targets = ["mpich", "mpich-3.3.2", "openmpi", "openmpi-4.0.2", "openmpi-3.1.4", "openmpi-2.1.6", "openmpi-1.10.7"]
-# mpi_targets = ["openmpi-4.0.2"]
+# mpi_targets = ["mpich", "mpich-3.3.2", "openmpi", "openmpi-4.0.2", "openmpi-3.1.4", "openmpi-2.1.6", "openmpi-1.10.7"]
+mpi_targets = ["mpich", "mpich-3.3.2", "openmpi", "openmpi-4.0.4", "openmpi-3.1.6", "openmpi-2.1.6", "openmpi-1.10.7"]
 # mpi_targets = ["mpich"]
 
 git_branch = "develop"
@@ -328,15 +328,19 @@ def make_base_image(machine, mpi, prepend, append, actual):
     "libcurl4-openssl-dev",
     "xsltproc",
     "gcovr",
-    "libzmq3-dev"]
+    "zeroc-ice-all-dev",
+    "zeroc-ice-all-runtime",
+    "libczmq-dev"]
 
     for apt_install_item in apt_install_items:
         apt_install_part += " \\\n" + "        " + apt_install_item
-    apt_install_part += "\\\n"
-    apt_install_part += "    && rm -rf /var/lib/apt"
+    apt_install_part += " \n"
+    # apt_install_part += "    && rm -rf /var/lib/apt\n"
 
-    cmake_ver = "3.17.2"
+    cmake_ver = "3.17.3"
     cmake_source = "cmake-" + cmake_ver + ".tar.gz"
+
+    cmake_cxx_flags = "-DCMAKE_CXX_FLAGS=\"" + MPI_COMPILE_FLAGS + "\" -DCMAKE_BUILD_TYPE=Release"
 
     common_top_part = (
     apt_install_part +
@@ -363,7 +367,7 @@ def make_base_image(machine, mpi, prepend, append, actual):
     "    && rm WSRT_Measures.tar.gz \\\n"
     "    && mkdir /var/lib/jenkins \\\n"
     "    && mkdir /var/lib/jenkins/workspace \n"
-    "# Build the latest casacore\n"
+    "# Build casacore\n"
     "WORKDIR /usr/local/share/casacore\n"
     "RUN wget https://github.com/casacore/casacore/archive/v" + casacore_ver + ".tar.gz \\\n"
     "    && tar -xzf v" + casacore_ver + ".tar.gz\\\n"
@@ -388,6 +392,29 @@ def make_base_image(machine, mpi, prepend, append, actual):
     "RUN rm -rf casacore \\\n"
     "    && rm -rf steve-ord-casarest-078f94e \\\n"
     "    && apt-get clean \n"
+    "# Build LOFAR\n"
+    "WORKDIR /usr/local/share\n"
+    "RUN mkdir LOFAR\n"
+    "WORKDIR /usr/local/share/LOFAR\n"
+    "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-common.git\n"
+    "WORKDIR /usr/local/share/LOFAR/lofar-common\n"
+    # "RUN git checkout " + git_branch + "\n"
+    "RUN mkdir build\n"
+    "WORKDIR /usr/local/share/LOFAR/lofar-common/build\n"
+    "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " .. \\\n"
+    "    && make -j" + str(nproc) + " \\\n"
+    "    && make install\n"
+    "WORKDIR /usr/local/share/LOFAR\n"
+    "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-blob.git\n"
+    "WORKDIR /usr/local/share/LOFAR/lofar-blob\n"
+    # "RUN git checkout " + git_branch + "\n"
+    "RUN mkdir build\n"
+    "WORKDIR /usr/local/share/LOFAR/lofar-blob/build\n"
+    "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " .. \\\n"
+    "    && make -j" + str(nproc) + " \\\n"
+    "    && make install\n"
+    "RUN echo \"alias git=\'echo DO NOT USE GIT INSIDE CONTAINER!\'\" >> ~/.bashrc \n"
+    "WORKDIR /home/\n"
     )
 
     # Construct MPI part
@@ -400,8 +427,8 @@ def make_base_image(machine, mpi, prepend, append, actual):
             if (mpi_ver == ""):
                 # if MPICH version is not specified, get the precompiled version
                 mpi_part = (
-                "RUN apt-get install -y libmpich-dev\\\n"
-                "    && rm -rf /var/lib/apt\n"
+                "RUN apt-get install -y libmpich-dev \n"
+                # "    && rm -rf /var/lib/apt\n"
                 )
 
             else:
@@ -429,8 +456,8 @@ def make_base_image(machine, mpi, prepend, append, actual):
             if (mpi_ver == ""):
                 # if OpenMPI version is not specified, get the precompiled version
                 mpi_part = (
-                "RUN apt-get install -y libopenmpi-dev\\\n"
-                "    && rm -rf /var/lib/apt\n"
+                "RUN apt-get install -y libopenmpi-dev \n"
+                # "    && rm -rf /var/lib/apt\n"
                 )
 
             else:
@@ -466,14 +493,14 @@ def make_base_image(machine, mpi, prepend, append, actual):
         else:
             raise ValueError("Unknown MPI target:", mpi)
 
-        docker_target.set_recipe_name("Dockerfile-casabase-" + mpi)
+        docker_target.set_recipe_name("Dockerfile-yandabase-" + mpi)
         docker_target.set_image_name(prepend + mpi + append)
 
     elif (machine == "galaxy"):
         # Galaxy (of Pawsey) has Docker image with its MPICH implementation already baked into 
         # an Ubuntu base.
         base_system_part = ("FROM pawsey/mpi-base:latest as buildenv\n")
-        docker_target.set_recipe_name("Dockerfile-casabase-" + machine)
+        docker_target.set_recipe_name("Dockerfile-yandabase-" + machine)
         docker_target.set_image_name(prepend + machine + append)
 
     else:
@@ -497,38 +524,28 @@ def make_final_image(machine, mpi, prepend, append, base_image, actual):
     Make the final image on top of base image.
     '''
 
-    base_part = ("FROM " + base_image + " as buildenv\n")
-
-    cmake_cxx_flags = "-DCMAKE_CXX_FLAGS=\"" + MPI_COMPILE_FLAGS + "\" -DCMAKE_BUILD_TYPE=Release"
-    cmake_build_flags = "-DBUILD_ANALYSIS=OFF -DBUILD_PIPELINE=OFF -DBUILD_COMPONENTS=OFF -DBUILD_SERVICES=OFF"
+    cmake_cxx_flags = "-DCMAKE_CXX_FLAGS=\"" + MPI_COMPILE_FLAGS + "\" -DCMAKE_BUILD_TYPE=Debug "
+    # cmake_build_flags = "-DBUILD_ANALYSIS=OFF -DBUILD_PIPELINE=OFF -DBUILD_COMPONENTS=OFF -DBUILD_SERVICES=OFF"
+    cmake_build_flags = (
+    "-DIce_HOME=/usr/lib/x86_64-linux-gnu/ "
+    "-DBUILD_ANALYSIS=ON "
+    "-DBUILD_PIPELINE=ON "
+    "-DBUILD_COMPONENTS=ON "
+    "-DBUILD_ANALYSIS=ON "
+    "-DBUILD_SERVICES=OFF "
+    "-DCMAKE_CXX_FLAGS=\"-coverage\" -DCMAKE_EXE_LINKER_FLAGS=\"-coverage\" "
+    "-DCMAKE_INSTALL_PREFIX=/builds/ASKAPSDP/install"
+    )
 
     common_part = (
-    "# Build LOFAR\n"
-    "WORKDIR /usr/local/share\n"
-    "RUN mkdir LOFAR\n"
-    "WORKDIR /usr/local/share/LOFAR\n"
-    "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-common.git\n"
-    "WORKDIR /usr/local/share/LOFAR/lofar-common\n"
-    "RUN git checkout " + git_branch + "\n"
-    "RUN mkdir build\n"
-    "WORKDIR /usr/local/share/LOFAR/lofar-common/build\n"
-    "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " .. \\\n"
-    "    && make -j" + str(nproc) + " \\\n"
-    "    && make install\n"
-    "WORKDIR /usr/local/share/LOFAR\n"
-    "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-blob.git\n"
-    "WORKDIR /usr/local/share/LOFAR/lofar-blob\n"
-    "RUN git checkout " + git_branch + "\n"
-    "RUN mkdir build\n"
-    "WORKDIR /usr/local/share/LOFAR/lofar-blob/build\n"
-    "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " .. \\\n"
-    "    && make -j" + str(nproc) + " \\\n"
-    "    && make install\n"
+    "# Follow the steps here to build manually\n"
+    "FROM " + base_image + " as buildenv\n"
+    "# Remove the line that prevents git from working\n"
+    "RUN head -n -1 ~/.bashrc > temp.txt ; mv temp.txt ~/.bashrc\n"
     "# Build yandasoft\n"
     "WORKDIR /home\n"
     "RUN git clone https://github.com/ATNF/all_yandasoft.git\n"
     "WORKDIR /home/all_yandasoft\n"
-    "RUN git checkout -b " + git_branch + "\n"
     "RUN ./git-do clone\n"
     "RUN ./git-do checkout -b " + git_branch + "\n"
     "RUN mkdir build\n"
@@ -536,18 +553,22 @@ def make_final_image(machine, mpi, prepend, append, base_image, actual):
     "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " " + cmake_build_flags + " .. \\\n"
     "    && make -j" + str(nproc) + " \\\n"
     "    && make install\n"
+    "# Remove dev tools\n"
+    "RUN apt-get remove -y git \\\n"
+    "    && apt-get autoremove -y \n"
+    "WORKDIR /home/\n"
     )
-
+   
     if machine == "generic":
         docker_target = DockerClass()
         docker_target.set_recipe_name("Dockerfile-yandasoft-" + mpi)
-        docker_target.set_recipe(header + base_part + common_part)
+        docker_target.set_recipe(header + common_part)
         docker_target.set_image_name(prepend + mpi + append)
 
     elif (machine == "galaxy"):
         docker_target = DockerClass()
         docker_target.set_recipe_name("Dockerfile-yandasoft-" + machine)
-        docker_target.set_recipe(header + base_part + common_part)
+        docker_target.set_recipe(header + common_part)
         docker_target.set_image_name(prepend + machine + append)
 
     else:
@@ -622,6 +643,7 @@ def main():
         description="Make Docker images for various MPI implementations",
         epilog="The targets can be changed from inside the script (the SETTINGS section)")
     parser.add_argument('-b', '--base_image', help='Create base image', action='store_true')
+    parser.add_argument('-d', '--dev_image', help='Create developer image', action='store_true')
     parser.add_argument('-f', '--final_image', help='Create final image', action='store_true')
     parser.add_argument('-s', '--show_targets_only', help='Show targets only', action='store_true')
     #parser.add_argument('-s', '--slurm', help='Create sample batch files for SLURM', action='store_true')
@@ -632,8 +654,8 @@ def main():
         sys.exit(0)
 
     # The common components of image names in DockerHub
-    # base_prepend = "csirocass/casabase-"
-    base_prepend = "casabase-"
+    # base_prepend = "csirocass/yandabase-"
+    base_prepend = "yandabase-"
     base_append = ":latest"
     # final_prepend = "csirocass/yandasoft-"
     final_prepend = "yandasoft-"
