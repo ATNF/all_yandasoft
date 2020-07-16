@@ -33,8 +33,8 @@
 # Currently, we target generic HPCs and a specific HPC: Galaxy.
 # When a specific machine target is chosen, MPI target is ignored.
 # Choose one or both of this list of target.
-machine_targets = ["generic", "galaxy"]
-# machine_targets = ["generic"]
+# machine_targets = ["generic", "galaxy"]
+machine_targets = ["generic"]
 
 # Set MPI implementations for generic machine in the list below.
 # Note that a specific machine requires no MPI specification.
@@ -47,12 +47,12 @@ machine_targets = ["generic", "galaxy"]
 # When they are not, the default version from the base OS will be installed
 # using the simplest method (apt-get install).
 # Choose a subset (or all) of this complete list of targets:
-# mpi_targets = ["mpich", "mpich-3.3.2", "openmpi", "openmpi-4.0.2", "openmpi-3.1.4", "openmpi-2.1.6", "openmpi-1.10.7"]
-mpi_targets = ["mpich", "mpich-3.3.2", "openmpi", "openmpi-4.0.4", "openmpi-3.1.6", "openmpi-2.1.6", "openmpi-1.10.7"]
-# mpi_targets = ["mpich"]
+# mpi_targets = ["mpich", "mpich-3.3.2", "openmpi", "openmpi-4.0.4", "openmpi-3.1.6", "openmpi-2.1.6", "openmpi-1.10.7"]
+# mpi_targets = ["openmpi", "openmpi-4.0.4", "openmpi-3.1.6", "openmpi-2.1.6", "openmpi-1.10.7"]
+mpi_targets = ["mpich"]
 
-git_branch = "develop"
-# git_branch = "master"
+# git_branch = "develop"
+git_branch = "master"
 
 casacore_ver = "3.3.0"
 
@@ -69,8 +69,14 @@ import argparse
 import subprocess
 import re
 import os
+import platform
 from pathlib import Path
 
+# User and group names inside container
+user = "yanda-user"
+group = "yanda-group"
+
+# If CPU has multi-cores, use the extra cores
 nproc_available = os.cpu_count()
 nproc = 1
 if nproc_available > 1:
@@ -79,7 +85,7 @@ print("nproc:", nproc)
 
 # Git repository of Yandasoft. 
 # No longer needed, as this is set directly downstream now.
-git_repository = "https://github.com/ATNF/yandasoft.git"
+# git_repository = "https://github.com/ATNF/yandasoft.git"
 
 # Header for all automatically generated Dockerfiles
 header = ("# This file is automatically created by " + __file__ + "\n")
@@ -161,7 +167,11 @@ class DockerClass:
         elif (self.image_name == ""):
             raise ValueError("Docker image file name has not been set")
         else:
-            return ("docker build -t " + self.image_name + " -f " + self.recipe_name + " .")
+            # return ("docker build -t " + self.image_name + " -f " + self.recipe_name + " .")
+            return ("docker image build --build-arg USER_ID=$(id -u ${USER}) " +
+                "--build-arg GROUP_ID=$(id -g ${USER}) -t " + self.image_name + 
+                " -f " + self.recipe_name + " .")
+
          
     def build_image(self):
         '''Build the Docker image'''
@@ -236,6 +246,7 @@ def get_mpi_type_and_version(mpi_name):
                 raise ValueError("Expecting openmpi:", mpi_name)
 
         else:
+            # Length > 7
             if (mpi_name[0:5] == "mpich"):
                 # MPICH with specified version number
                 int_ver = split_version_number(mpi_name[6:])
@@ -277,7 +288,7 @@ def make_base_image(machine, mpi, prepend, append, actual):
     apt_install_part = (
     "ENV DEBIAN_FRONTEND=\"noninteractive\"\n"
     "RUN apt-get update \\\n"
-    "    && apt-get upgrade -y \\\n"
+    # "    && apt-get upgrade -y \\\n"
     "    && apt-get autoremove -y \\\n"
     "    && apt-get install -y"
     )
@@ -398,7 +409,6 @@ def make_base_image(machine, mpi, prepend, append, actual):
     "WORKDIR /usr/local/share/LOFAR\n"
     "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-common.git\n"
     "WORKDIR /usr/local/share/LOFAR/lofar-common\n"
-    # "RUN git checkout " + git_branch + "\n"
     "RUN mkdir build\n"
     "WORKDIR /usr/local/share/LOFAR/lofar-common/build\n"
     "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " .. \\\n"
@@ -407,14 +417,39 @@ def make_base_image(machine, mpi, prepend, append, actual):
     "WORKDIR /usr/local/share/LOFAR\n"
     "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-blob.git\n"
     "WORKDIR /usr/local/share/LOFAR/lofar-blob\n"
-    # "RUN git checkout " + git_branch + "\n"
     "RUN mkdir build\n"
     "WORKDIR /usr/local/share/LOFAR/lofar-blob/build\n"
     "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " .. \\\n"
     "    && make -j" + str(nproc) + " \\\n"
     "    && make install\n"
-    "RUN echo \"alias git=\'echo DO NOT USE GIT INSIDE CONTAINER!\'\" >> ~/.bashrc \n"
-    "WORKDIR /home/\n"
+    "# Set environment variables\n"
+    "ENV LD_LIBRARY_PATH=/home/" + user + "/all_yandasoft/install/lib:/usr/local/lib \n"
+    "ENV PATH=/home/" + user + "/all_yandasoft/install/bin:$PATH \n"
+    "# Switch into user and group ID on the host side\n"
+    "ARG USER_ID\n"
+    "ARG GROUP_ID\n"
+    "RUN if [ ${USER_ID:-0} -ne 0 ] && [ ${GROUP_ID:-0} -ne 0 ] ; then \\\n"
+    "    if id " + user + " ; then userdel -f " + user + " ; fi &&\\\n"
+    "    if getent group " + group + " ; then groupdel " + group + " ; fi &&\\\n"
+    "    groupadd --gid ${GROUP_ID} " + group + " &&\\\n"
+    "    useradd --no-log-init --uid ${USER_ID} --gid " + group + " " + user + " \\\n"
+    ";fi\n"
+    "WORKDIR /home/" + user + "\n"
+    "RUN chown --changes --silent --no-dereference --recursive ${USER_ID}:${GROUP_ID} /home/yanda-user \n"
+    "USER " + user + "\n"
+    "# Set up aliases in .bashrc\n"
+    "RUN echo \"alias rm=\'rm -i\'\" >> ~/.bashrc &&\\\n"                                                          
+    "    echo \"alias cp=\'cp -i\'\" >> ~/.bashrc &&\\\n"
+    "    echo \"alias mv=\'mv -i\'\" >> ~/.bashrc \n"
+    "# Put start-up message in .bashrc\n"
+    "RUN echo \"echo \" >> ~/.bashrc &&\\\n"
+    "    echo \"echo ================================================================================\" >> ~/.bashrc &&\\\n"
+    "    echo \"echo Welcome to Yandabase container for developers! \" >> ~/.bashrc &&\\\n"
+    "    echo \"echo Version x.y.z \" >> ~/.bashrc &&\\\n"
+    "    echo \"echo More information: \" >> ~/.bashrc &&\\\n"
+    "    echo \"echo https://confluence.csiro.au/display/ASDP/Containers+for+end+users+and+developers\" >> ~/.bashrc &&\\\n"
+    "    echo \"echo ================================================================================\" >> ~/.bashrc \n"
+    "WORKDIR /home/" + user + "/all_yandasoft \n"
     )
 
     # Construct MPI part
@@ -524,7 +559,7 @@ def make_final_image(machine, mpi, prepend, append, base_image, actual):
     Make the final image on top of base image.
     '''
 
-    cmake_cxx_flags = "-DCMAKE_CXX_FLAGS=\"" + MPI_COMPILE_FLAGS + "\" -DCMAKE_BUILD_TYPE=Debug "
+    cmake_cxx_flags = "-DCMAKE_CXX_FLAGS=\"" + MPI_COMPILE_FLAGS + "\" -DCMAKE_BUILD_TYPE=Release "
     # cmake_build_flags = "-DBUILD_ANALYSIS=OFF -DBUILD_PIPELINE=OFF -DBUILD_COMPONENTS=OFF -DBUILD_SERVICES=OFF"
     cmake_build_flags = (
     "-DIce_HOME=/usr/lib/x86_64-linux-gnu/ "
@@ -532,24 +567,25 @@ def make_final_image(machine, mpi, prepend, append, base_image, actual):
     "-DBUILD_PIPELINE=ON "
     "-DBUILD_COMPONENTS=ON "
     "-DBUILD_ANALYSIS=ON "
-    "-DBUILD_SERVICES=OFF "
+    "-DBUILD_SERVICES=ON "
     "-DCMAKE_CXX_FLAGS=\"-coverage\" -DCMAKE_EXE_LINKER_FLAGS=\"-coverage\" "
-    "-DCMAKE_INSTALL_PREFIX=/builds/ASKAPSDP/install"
+    "-DCMAKE_INSTALL_PREFIX=/home/yanda-user/all_yandasoft/install"
     )
 
     common_part = (
     "# Follow the steps here to build manually\n"
     "FROM " + base_image + " as buildenv\n"
-    "# Remove the line that prevents git from working\n"
-    "RUN head -n -1 ~/.bashrc > temp.txt ; mv temp.txt ~/.bashrc\n"
+    # "# Remove the line that prevents git from working\n"
+    # "RUN head -n -1 ~/.bashrc > temp.txt ; mv temp.txt ~/.bashrc\n"
     "# Build yandasoft\n"
-    "WORKDIR /home\n"
+    "RUN echo ${PWD}\n"
+    # "WORKDIR /home\n"
     "RUN git clone https://github.com/ATNF/all_yandasoft.git\n"
     "WORKDIR /home/all_yandasoft\n"
     "RUN ./git-do clone\n"
     "RUN ./git-do checkout -b " + git_branch + "\n"
     "RUN mkdir build\n"
-    "WORKDIR /home/all_yandasoft/build\n"
+    "WORKDIR /home/yanda-user/all_yandasoft/build\n"
     "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " " + cmake_build_flags + " .. \\\n"
     "    && make -j" + str(nproc) + " \\\n"
     "    && make install\n"
@@ -558,6 +594,8 @@ def make_final_image(machine, mpi, prepend, append, base_image, actual):
     "    && apt-get autoremove -y \n"
     "WORKDIR /home/\n"
     )
+
+    # TODO: Remove more dev tools as we want the final image to be as small as possible
    
     if machine == "generic":
         docker_target = DockerClass()
