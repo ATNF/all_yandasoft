@@ -6,6 +6,7 @@
 /askap-cmake
 /askap-analysis
 /askap-pipelinetasks
+/askap-services
 /base-accessors
 /base-askap
 /base-askapparallel
