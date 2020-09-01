@@ -10,13 +10,12 @@ RUN apt-get install -y xsltproc
 RUN apt-get install -y zeroc-ice-all-dev 
 RUN apt-get install -y zeroc-ice-all-runtime 
 RUN apt-get install -y libczmq-dev
-ARG CACHE-DATE=28-07-2020-15:50
+ARG CACHE-DATE=28-08-2020-15:50
 ARG BRANCH=develop
 WORKDIR /home
-RUN git clone https://github.com/ATNF/all_yandasoft.git
+RUN git clone https://gitlab.com/ASKAPSDP/all_yandasoft.git
 WORKDIR /home/all_yandasoft
-RUN ./git-do clone
-RUN ./git-do checkout -b $BRANCH
+RUN ./git-do clone -m gitlab -b $BRANCH
 RUN mkdir build
 WORKDIR /home/all_yandasoft/build
 RUN cmake -DIce_HOME=/usr/lib/x86_64-linux-gnu/ -DBUILD_ANALYSIS=ON -DBUILD_PIPELINE=ON -DBUILD_COMPONENTS=ON -DBUILD_ANALYSIS=ON -DBUILD_SERVICES=OFF -DCMAKE_BUILD_TYPE=Release ..
