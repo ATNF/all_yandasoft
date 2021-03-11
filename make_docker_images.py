@@ -33,7 +33,7 @@
 # Currently, we target generic HPCs and a specific HPC: Galaxy.
 # When a specific machine target is chosen, MPI target is ignored.
 # Choose one or both of this list of target.
-#machine_targets = ["generic", "galaxy"]
+# machine_targets = ["generic", "galaxy"]
 machine_targets = ["generic"]
 
 # Set MPI implementations for generic machine in the list below.
@@ -47,9 +47,9 @@ machine_targets = ["generic"]
 # When they are not, the default version from the base OS will be installed
 # using the simplest method (apt-get install).
 # Choose a subset (or all) of this complete list of targets:
-# mpi_targets = ["mpich", "mpich-3.3.2", "openmpi", "openmpi-4.0.5", "openmpi-3.1.6", "openmpi-2.1.6", "openmpi-1.10.7"]
-#mpi_targets = ["mpich", "openmpi-3.1.6", "openmpi-2.1.6"]
-mpi_targets = ["openmpi-3.1.6"]
+# mpi_targets = ["mpich", "mpich-3.3.2", "openmpi", "openmpi-4.1.0", "openmpi-3.1.6", "openmpi-2.1.6", "openmpi-1.10.7"]
+# mpi_targets = ["mpich", "openmpi-4.1.0", "openmpi-3.1.6", "openmpi-2.1.6"]
+mpi_targets = ["mpich"]
 
 #git_branch = "release/1.1.0"
 git_branch = "develop"
@@ -284,7 +284,7 @@ def make_base_image(machine, mpi, prepend, append, actual):
     "ENV DEBIAN_FRONTEND=\"noninteractive\"\n"
     "RUN apt-get update \\\n"
     "    && apt-get upgrade -y \\\n"
-    "    && apt-get autoremove -y \\\n"
+    # "    && apt-get autoremove -y \\\n"
     "    && apt-get install -y"
     )
 
@@ -292,58 +292,68 @@ def make_base_image(machine, mpi, prepend, append, actual):
     # Note that most have the default versions as set by the base system.
     # TODO: Remove stuff that is not needed
     apt_install_items = [
-    "g++",
-    "gfortran",
-    "m4",
     "autoconf",
     "automake",
-    "libtool",      
-    "flex",
     "bison",
-    "make",
-    "libncurses5-dev",
-    "libreadline-dev",
-    "libopenblas-dev",        
-    "liblapacke-dev",
-    "libcfitsio-dev",
-    "wcslib-dev",
-    "libhdf5-serial-dev", 
-    "libfftw3-dev",
-    "libpython2.7-dev", 
-    "libpython3-dev", 
-    "python-pip",          
-    "python-numpy",
-    "python-scipy",
-    "libboost-python-dev", 
+    "docker",       
+    "flex",
+    "g++",
+    "gcovr",
+    "gdb",
+    "gfortran",
+    "git",
     "libboost-dev",   
     "libboost-filesystem-dev", 
+    "libboost-python-dev", 
     "libboost-program-options-dev", 
+    "libboost-regex-dev",  
     "libboost-signals-dev",
     "libboost-system-dev",  
     "libboost-thread-dev",   
-    "libboost-regex-dev",  
-    "libcppunit-dev",  
-    "git",
+    "libcfitsio-dev",
+    "libcppunit-dev",
+    "libcurl4-openssl-dev",
+    "libczmq-dev",
+    "libfftw3-dev",
     "libffi-dev",     
     "libgsl-dev",        
+    "libhdf5-serial-dev", 
+    "liblapacke-dev",
     "liblog4cxx-dev", 
-    "patch",           
-    "subversion",          
-    "wget",     
-    "docker",       
+    "libncurses5-dev",
+    "libopenblas-dev",        
+    "libpython2.7-dev", 
+    "libpython3-dev", 
+    "libreadline-dev",
+    "libtool",      
     "libxerces-c-dev",
-    "libcurl4-openssl-dev",
+    "libzmq3-dev",
+    "m4",
+    "make",
+    "patch",           
+    "python-numpy",
+    "python-pip",          
+    "python-scipy",
+    "subversion",          
+    "tzdata",
+    "valgrind",
+    "vim",
+    "wcslib-dev",
+    "wget",     
     "xsltproc",
-    "gcovr",
-    "libzmq3-dev"]
+    "zeroc-ice-all-dev",
+    "zeroc-ice-all-runtime"
+    ]
 
     for apt_install_item in apt_install_items:
         apt_install_part += " \\\n" + "        " + apt_install_item
-    apt_install_part += "\\\n"
-    apt_install_part += "    && rm -rf /var/lib/apt"
+    apt_install_part += "\n"
+    # apt_install_part += "\\\n"
+    # apt_install_part += "    && apt-get autoremove -y \\\n"
+    # apt_install_part += "    && rm -rf /var/lib/apt \n"
 
-    # cmake_ver = "3.17.2"
-    cmake_ver = "3.18.4"
+    # cmake_ver = "3.18.4"
+    cmake_ver = "3.19.6"
     cmake_source = "cmake-" + cmake_ver + ".tar.gz"
 
     common_top_part = (
@@ -377,8 +387,6 @@ def make_base_image(machine, mpi, prepend, append, actual):
     "    && tar -xzf v" + casacore_ver + ".tar.gz\\\n"
     "    && rm v" + casacore_ver + ".tar.gz\n"
     "WORKDIR /usr/local/share/casacore/casacore-" + casacore_ver + "\n"
-    #"RUN git clone https://github.com/casacore/casacore.git \n"
-    #"WORKDIR /usr/local/share/casacore/casacore \n"
     "RUN mkdir build\n"
     "WORKDIR build\n"
     "RUN cmake " + cmake_cxx_compiler + " -DUSE_FFTW3=ON -DDATA_DIR=/usr/local/share/casacore/data \\\n"
@@ -386,8 +394,6 @@ def make_base_image(machine, mpi, prepend, append, actual):
     "    && make -j" + str(nproc) + " \\\n"
     "    && make install\n"
     "WORKDIR /usr/local/share/casacore/\n"
-    #"RUN git clone https://github.com/casacore/casarest.git \n"
-    #"WORKDIR /usr/local/share/casacore/casarest \n"
     "RUN wget https://github.com/steve-ord/casarest/tarball/078f94e \\\n"
     "    && tar -xzf 078f94e \\\n"
     "    && rm 078f94e\n"
@@ -402,6 +408,32 @@ def make_base_image(machine, mpi, prepend, append, actual):
     #"    && rm -rf casarest \\\n"
     "    && rm -rf steve-ord-casarest-078f94e \\\n"
     "    && apt-get clean \n"
+    "# Build LOFAR\n"
+    "WORKDIR /usr/local/share\n"
+    "RUN mkdir LOFAR\n"
+    "WORKDIR /usr/local/share/LOFAR\n"
+    "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-common.git\n"
+    "WORKDIR /usr/local/share/LOFAR/lofar-common\n"
+    "RUN git checkout develop \n"
+    "RUN mkdir build\n"
+    "WORKDIR /usr/local/share/LOFAR/lofar-common/build\n"
+    "RUN cmake " + cmake_cxx_compiler + " -DCMAKE_CXX_FLAGS=\"-I/usr/local/include -pthread\" \\\n"
+    "    -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENMP=YES .. \\\n"
+    "    && make -j" + str(nproc) + " \\\n"
+    "    && make install\n"
+    "WORKDIR /usr/local/share/LOFAR\n"
+    "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-blob.git\n"
+    "WORKDIR /usr/local/share/LOFAR/lofar-blob\n"
+    "RUN git checkout develop \n"
+    "RUN mkdir build\n"
+    "WORKDIR /usr/local/share/LOFAR/lofar-blob/build\n"
+    "RUN cmake " + cmake_cxx_compiler + " -DCMAKE_CXX_FLAGS=\"-I/usr/local/include -pthread\" \\\n"
+    "    -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENMP=YES .. \\\n"
+    "    && make -j" + str(nproc) + " \\\n"
+    "    && make install\n"
+    "# Clean up\n"
+    "RUN apt-get autoremove -y \\\n"
+    "    && rm -rf /var/lib/apt \n"
     )
 
     # Construct MPI part
@@ -415,8 +447,9 @@ def make_base_image(machine, mpi, prepend, append, actual):
             if (mpi_ver == ""):
                 # if MPICH version is not specified, get the precompiled version
                 mpi_part = (
-                "RUN apt-get install -y libmpich-dev\\\n"
-                "    && rm -rf /var/lib/apt\n"
+                "RUN apt-get install -y libmpich-dev\n"
+                # "RUN apt-get install -y libmpich-dev\\\n"
+                # "    && rm -rf /var/lib/apt\n"
                 )
 
             else:
@@ -443,12 +476,6 @@ def make_base_image(machine, mpi, prepend, append, actual):
 
         elif (mpi_type == "openmpi"):
             if (mpi_ver == ""):
-                # if OpenMPI version is not specified, get the precompiled 
-                # version
-                #mpi_part = (
-                #"RUN apt-get install -y libopenmpi-dev\\\n"
-                #"    && rm -rf /var/lib/apt\n"
-                #)
                 raise ValueError("OpenMPI version must be specified")
 
             else:
@@ -533,29 +560,29 @@ def make_final_image(machine, mpi, prepend, append, base_image, actual):
         "-DBUILD_SERVICES=OFF")
 
     common_part = (
-    "# Build LOFAR\n"
-    "WORKDIR /usr/local/share\n"
-    "RUN mkdir LOFAR\n"
-    "WORKDIR /usr/local/share/LOFAR\n"
-    "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-common.git\n"
-    "WORKDIR /usr/local/share/LOFAR/lofar-common\n"
-    # "RUN git checkout " + git_branch + "\n"
-    "RUN git checkout develop \n"
-    "RUN mkdir build\n"
-    "WORKDIR /usr/local/share/LOFAR/lofar-common/build\n"
-    "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " .. \\\n"
-    "    && make -j" + str(nproc) + " \\\n"
-    "    && make install\n"
-    "WORKDIR /usr/local/share/LOFAR\n"
-    "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-blob.git\n"
-    "WORKDIR /usr/local/share/LOFAR/lofar-blob\n"
-    # "RUN git checkout " + git_branch + "\n"
-    "RUN git checkout develop \n"
-    "RUN mkdir build\n"
-    "WORKDIR /usr/local/share/LOFAR/lofar-blob/build\n"
-    "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " .. \\\n"
-    "    && make -j" + str(nproc) + " \\\n"
-    "    && make install\n"
+    # "# Build LOFAR\n"
+    # "WORKDIR /usr/local/share\n"
+    # "RUN mkdir LOFAR\n"
+    # "WORKDIR /usr/local/share/LOFAR\n"
+    # "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-common.git\n"
+    # "WORKDIR /usr/local/share/LOFAR/lofar-common\n"
+    # # "RUN git checkout " + git_branch + "\n"
+    # "RUN git checkout develop \n"
+    # "RUN mkdir build\n"
+    # "WORKDIR /usr/local/share/LOFAR/lofar-common/build\n"
+    # "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " .. \\\n"
+    # "    && make -j" + str(nproc) + " \\\n"
+    # "    && make install\n"
+    # "WORKDIR /usr/local/share/LOFAR\n"
+    # "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-blob.git\n"
+    # "WORKDIR /usr/local/share/LOFAR/lofar-blob\n"
+    # # "RUN git checkout " + git_branch + "\n"
+    # "RUN git checkout develop \n"
+    # "RUN mkdir build\n"
+    # "WORKDIR /usr/local/share/LOFAR/lofar-blob/build\n"
+    # "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " .. \\\n"
+    # "    && make -j" + str(nproc) + " \\\n"
+    # "    && make install\n"
     "# Build yandasoft\n"
     "WORKDIR /home\n"
     # "RUN git clone https://github.com/ATNF/all_yandasoft.git\n"
