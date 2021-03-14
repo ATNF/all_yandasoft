@@ -34,7 +34,7 @@
 # When a specific machine target is chosen, MPI target is ignored.
 # Choose one or both of this list of target.
 # machine_targets = ["generic", "galaxy"]
-machine_targets = ["generic"]
+machine_targets = ["galaxy"]
 
 # Set MPI implementations for generic machine in the list below.
 # Note that a specific machine requires no MPI specification.
@@ -48,12 +48,17 @@ machine_targets = ["generic"]
 # using the simplest method (apt-get install).
 # Choose a subset (or all) of this complete list of targets:
 # mpi_targets = ["mpich", "mpich-3.3.2", "openmpi", "openmpi-4.1.0", "openmpi-3.1.6", "openmpi-2.1.6", "openmpi-1.10.7"]
-# mpi_targets = ["mpich", "openmpi-4.1.0", "openmpi-3.1.6", "openmpi-2.1.6"]
-mpi_targets = ["mpich"]
+mpi_targets = ["mpich", "openmpi-4.1.0", "openmpi-3.1.6", "openmpi-2.1.6"]
 
-#git_branch = "release/1.1.0"
-git_branch = "develop"
-#git_branch = "master"
+# This is for automatic build of "develop" branch
+# git_branch = "develop"
+# This is for manual build of release tag
+git_branch = "release/1.1.0"
+# This is not needed anymore (has been replaced by release tag)
+# git_branch = "master"
+
+if git_branch[0:7] == "release":
+    print("This is a release of version:", git_branch[8:])
 
 casacore_ver = "3.3.0"
 
@@ -74,8 +79,8 @@ from pathlib import Path
 nproc_available = os.cpu_count()
 nproc = 1
 if nproc_available > 1:
-    nproc = nproc_available #- 1
-print("nproc:", nproc)
+    nproc = nproc_available - 1
+print("The number of CPU cores used:", nproc)
 
 # Git repository of Yandasoft. 
 # No longer needed, as this is set directly downstream now.
@@ -408,29 +413,29 @@ def make_base_image(machine, mpi, prepend, append, actual):
     #"    && rm -rf casarest \\\n"
     "    && rm -rf steve-ord-casarest-078f94e \\\n"
     "    && apt-get clean \n"
-    "# Build LOFAR\n"
-    "WORKDIR /usr/local/share\n"
-    "RUN mkdir LOFAR\n"
-    "WORKDIR /usr/local/share/LOFAR\n"
-    "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-common.git\n"
-    "WORKDIR /usr/local/share/LOFAR/lofar-common\n"
-    "RUN git checkout develop \n"
-    "RUN mkdir build\n"
-    "WORKDIR /usr/local/share/LOFAR/lofar-common/build\n"
-    "RUN cmake " + cmake_cxx_compiler + " -DCMAKE_CXX_FLAGS=\"-I/usr/local/include -pthread\" \\\n"
-    "    -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENMP=YES .. \\\n"
-    "    && make -j" + str(nproc) + " \\\n"
-    "    && make install\n"
-    "WORKDIR /usr/local/share/LOFAR\n"
-    "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-blob.git\n"
-    "WORKDIR /usr/local/share/LOFAR/lofar-blob\n"
-    "RUN git checkout develop \n"
-    "RUN mkdir build\n"
-    "WORKDIR /usr/local/share/LOFAR/lofar-blob/build\n"
-    "RUN cmake " + cmake_cxx_compiler + " -DCMAKE_CXX_FLAGS=\"-I/usr/local/include -pthread\" \\\n"
-    "    -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENMP=YES .. \\\n"
-    "    && make -j" + str(nproc) + " \\\n"
-    "    && make install\n"
+    # "# Build LOFAR\n"
+    # "WORKDIR /usr/local/share\n"
+    # "RUN mkdir LOFAR\n"
+    # "WORKDIR /usr/local/share/LOFAR\n"
+    # "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-common.git\n"
+    # "WORKDIR /usr/local/share/LOFAR/lofar-common\n"
+    # "RUN git checkout develop \n"
+    # "RUN mkdir build\n"
+    # "WORKDIR /usr/local/share/LOFAR/lofar-common/build\n"
+    # "RUN cmake " + cmake_cxx_compiler + " -DCMAKE_CXX_FLAGS=\"-I/usr/local/include -pthread\" \\\n"
+    # "    -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENMP=YES .. \\\n"
+    # "    && make -j" + str(nproc) + " \\\n"
+    # "    && make install\n"
+    # "WORKDIR /usr/local/share/LOFAR\n"
+    # "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-blob.git\n"
+    # "WORKDIR /usr/local/share/LOFAR/lofar-blob\n"
+    # "RUN git checkout develop \n"
+    # "RUN mkdir build\n"
+    # "WORKDIR /usr/local/share/LOFAR/lofar-blob/build\n"
+    # "RUN cmake " + cmake_cxx_compiler + " -DCMAKE_CXX_FLAGS=\"-I/usr/local/include -pthread\" \\\n"
+    # "    -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENMP=YES .. \\\n"
+    # "    && make -j" + str(nproc) + " \\\n"
+    # "    && make install\n"
     "# Clean up\n"
     "RUN apt-get autoremove -y \\\n"
     "    && rm -rf /var/lib/apt \n"
@@ -559,6 +564,34 @@ def make_final_image(machine, mpi, prepend, append, base_image, actual):
     cmake_build_flags = ("-DBUILD_ANALYSIS=OFF -DBUILD_PIPELINE=OFF -DBUILD_COMPONENTS=OFF " +
         "-DBUILD_SERVICES=OFF")
 
+    apt_purge_part = (
+    "RUN apt-get remove -y \\\n"
+    )
+
+    apt_purge_items = [
+    "autoconf",
+    "automake",
+    "g++",
+    "gcovr",
+    "gdb",
+    "gfortran",
+    "git",
+    "libtool",      
+    "make",
+    "patch",           
+    "subversion",          
+    "valgrind",
+    "vim",
+    "wget",     
+    ]
+
+    for apt_purge_item in apt_purge_items:
+        apt_purge_part += "        " + apt_purge_item + " \\\n"
+
+    # apt_purge_part += "\n"
+    apt_purge_part += "    && apt-get autoremove -y \\\n"
+    apt_purge_part += "    && rm -rf /var/lib/apt \n"
+
     common_part = (
     # "# Build LOFAR\n"
     # "WORKDIR /usr/local/share\n"
@@ -590,10 +623,10 @@ def make_final_image(machine, mpi, prepend, append, base_image, actual):
     "WORKDIR /home/all_yandasoft\n"
     # "RUN git checkout -b " + git_branch + "\n"
     # "RUN git checkout " + git_branch + "\n"
-    "RUN git checkout develop \n"
+    # "RUN git checkout develop \n"
     "RUN ./git-do clone\n"
-    # "RUN ./git-do checkout -b " + git_branch + "\n"
-    "RUN ./git-do checkout " + git_branch + "\n"
+    "RUN ./git-do checkout -b " + git_branch + "\n"
+    # "RUN ./git-do checkout " + git_branch + "\n"
     "RUN mkdir build\n"
     "WORKDIR /home/all_yandasoft/build\n"
     "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " " + cmake_build_flags + " .. \\\n"
@@ -601,6 +634,9 @@ def make_final_image(machine, mpi, prepend, append, base_image, actual):
     "    && make install\n"
     )
 
+    if git_branch[0:7] == "release":
+        common_part += apt_purge_part
+    
     if machine == "generic":
         docker_target = DockerClass()
         (mpi_type, mpi_num) = get_mpi_type_and_version(mpi)
