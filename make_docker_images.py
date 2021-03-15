@@ -34,7 +34,7 @@
 # When a specific machine target is chosen, MPI target is ignored.
 # Choose one or both of this list of target.
 # machine_targets = ["generic", "galaxy"]
-machine_targets = ["galaxy"]
+machine_targets = ["generic"]
 
 # Set MPI implementations for generic machine in the list below.
 # Note that a specific machine requires no MPI specification.
@@ -634,8 +634,9 @@ def make_final_image(machine, mpi, prepend, append, base_image, actual):
     "    && make install\n"
     )
 
-    if git_branch[0:7] == "release":
-        common_part += apt_purge_part
+    # Switch off for the time being
+    # if git_branch[0:7] == "release":
+    #     common_part += apt_purge_part
     
     if machine == "generic":
         docker_target = DockerClass()
