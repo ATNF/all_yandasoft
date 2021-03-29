@@ -33,8 +33,8 @@
 # Currently, we target generic HPCs and a specific HPC: Galaxy.
 # When a specific machine target is chosen, MPI target is ignored.
 # Choose one or both of this list of target.
-# machine_targets = ["generic", "galaxy"]
-machine_targets = ["galaxy"]
+machine_targets = ["generic", "galaxy"]
+# machine_targets = ["galaxy"]
 
 # Set MPI implementations for generic machine in the list below.
 # Note that a specific machine requires no MPI specification.
@@ -413,6 +413,7 @@ def make_base_image(machine, mpi, prepend, append, actual):
     #"    && rm -rf casarest \\\n"
     "    && rm -rf steve-ord-casarest-078f94e \\\n"
     "    && apt-get clean \n"
+    # LOFAR will be built in final image by yandasoft repo
     # "# Build LOFAR\n"
     # "WORKDIR /usr/local/share\n"
     # "RUN mkdir LOFAR\n"
@@ -436,9 +437,11 @@ def make_base_image(machine, mpi, prepend, append, actual):
     # "    -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENMP=YES .. \\\n"
     # "    && make -j" + str(nproc) + " \\\n"
     # "    && make install\n"
+    # "# Clean up\n"
+    # "RUN apt-get autoremove -y \\\n"
+    # "    && rm -rf /var/lib/apt \n"
     "# Clean up\n"
-    "RUN apt-get autoremove -y \\\n"
-    "    && rm -rf /var/lib/apt \n"
+    "RUN apt-get autoremove -y \n"
     )
 
     # Construct MPI part
@@ -593,40 +596,13 @@ def make_final_image(machine, mpi, prepend, append, base_image, actual):
     apt_purge_part += "    && rm -rf /var/lib/apt \n"
 
     common_part = (
-    # "# Build LOFAR\n"
-    # "WORKDIR /usr/local/share\n"
-    # "RUN mkdir LOFAR\n"
-    # "WORKDIR /usr/local/share/LOFAR\n"
-    # "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-common.git\n"
-    # "WORKDIR /usr/local/share/LOFAR/lofar-common\n"
-    # # "RUN git checkout " + git_branch + "\n"
-    # "RUN git checkout develop \n"
-    # "RUN mkdir build\n"
-    # "WORKDIR /usr/local/share/LOFAR/lofar-common/build\n"
-    # "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " .. \\\n"
-    # "    && make -j" + str(nproc) + " \\\n"
-    # "    && make install\n"
-    # "WORKDIR /usr/local/share/LOFAR\n"
-    # "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-blob.git\n"
-    # "WORKDIR /usr/local/share/LOFAR/lofar-blob\n"
-    # # "RUN git checkout " + git_branch + "\n"
-    # "RUN git checkout develop \n"
-    # "RUN mkdir build\n"
-    # "WORKDIR /usr/local/share/LOFAR/lofar-blob/build\n"
-    # "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " .. \\\n"
-    # "    && make -j" + str(nproc) + " \\\n"
-    # "    && make install\n"
     "# Build yandasoft\n"
     "WORKDIR /home\n"
     # "RUN git clone https://github.com/ATNF/all_yandasoft.git\n"
     "RUN git clone https://gitlab.com/ASKAPSDP/all_yandasoft.git\n"
     "WORKDIR /home/all_yandasoft\n"
-    # "RUN git checkout -b " + git_branch + "\n"
-    # "RUN git checkout " + git_branch + "\n"
-    # "RUN git checkout develop \n"
     "RUN ./git-do clone\n"
     "RUN ./git-do checkout -b " + git_branch + "\n"
-    # "RUN ./git-do checkout " + git_branch + "\n"
     "RUN mkdir build\n"
     "WORKDIR /home/all_yandasoft/build\n"
     "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " " + cmake_build_flags + " .. \\\n"

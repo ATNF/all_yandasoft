@@ -1,0 +1,13 @@
+# This file is automatically created by make_docker_images.py
+FROM csirocass/yandabase:openmpi4 as buildenv
+# Build yandasoft
+WORKDIR /home
+RUN git clone https://gitlab.com/ASKAPSDP/all_yandasoft.git
+WORKDIR /home/all_yandasoft
+RUN ./git-do clone
+RUN ./git-do checkout -b develop
+RUN mkdir build
+WORKDIR /home/all_yandasoft/build
+RUN cmake -DCMAKE_CXX_COMPILER=mpicxx -DCMAKE_CXX_FLAGS="-I/usr/local/include -pthread" -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENMP=YES -DBUILD_ANALYSIS=OFF -DBUILD_PIPELINE=OFF -DBUILD_COMPONENTS=OFF -DBUILD_SERVICES=OFF .. \
+    && make -j7 \
+    && make install
