@@ -610,8 +610,9 @@ def make_final_image(machine, mpi, prepend, append, base_image, actual):
     "    && make install\n"
     )
 
-    if git_branch[0:7] == "release":
-        common_part += apt_purge_part
+    # Switch off for the time being
+    # if git_branch[0:7] == "release":
+    #     common_part += apt_purge_part
     
     if machine == "generic":
         docker_target = DockerClass()
