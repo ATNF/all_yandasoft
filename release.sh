@@ -36,6 +36,7 @@ fi
 pipeline="./git-do checkout -b ${branch}"
 pipeline=" ${pipeline} && ./git-do foreach git checkout -b release/${tag} ${branch}"
 pipeline=" ${pipeline} && ./git-do foreach git push --set-upstream ${remote} release/${tag}"
+
 echo ${pipeline}
 read -p "Continue (y/n)?" choice
 case "$choice" in 
@@ -43,7 +44,6 @@ case "$choice" in
   n|N ) echo "no" ;;
   * ) echo "invalid" ;;
 esac
-
 
 branches='develop master'
 pipeline=''
