@@ -1,6 +1,6 @@
 # GitLab CI n conjunction with GitLab Runner can use Docker Engine to test and build any application.
 # Docker, when used with GitLab CI, runs each job in a separate and isolated container using the predefined image that is set up in .gitlab-ci.yml.
-image: registry.gitlab.com/askapsdp/all_yandasoft:base
+image: registry.gitlab.com/askapsdp/base-image/yandabase:2.3
 
 .common: {tags: [azure]}
 .common_docker:
@@ -66,6 +66,8 @@ build_docker_image:
     - BRANCH=${CI_COMMIT_TAG:-${CI_COMMIT_BRANCH}}
     - DOCKER_TAG=$BRANCH
     - DOCKER_BUILD=FALSE
+    - mkdir docker
+    - cd docker 
     - >
       if [ "$CI_COMMIT_BRANCH" = develop ]; then
         DOCKER_TAG=latest
@@ -76,7 +78,8 @@ build_docker_image:
       fi
     - >
       if [ "$DOCKER_BUILD" = TRUE ]; then
-        docker build -t $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/all_yandasoft:$DOCKER_TAG --build-arg BRANCH=${YANDASOFT_BRANCH} -f .gitlab-docker .
+        docker build -t $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/all_yandasoft:intermediate --build-arg BRANCH=${YANDASOFT_BRANCH} -f ../.gitlab-docker .
+        docker build -t $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/all_yandasoft:$DOCKER_TAG -f ../.gitlab-docker-small .
         docker push $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/all_yandasoft:$DOCKER_TAG
       fi      
 test:

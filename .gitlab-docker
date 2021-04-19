@@ -1,4 +1,4 @@
-FROM registry.gitlab.com/askapsdp/all_yandasoft:base
+FROM registry.gitlab.com/askapsdp/base-image/yandabase:2.3 as buildenv
 RUN apt-get update --fix-missing
 RUN apt-get upgrade -y
 ENV DEBIAN_FRONTEND=noninteractive
@@ -21,3 +21,6 @@ WORKDIR /home/all_yandasoft/build
 RUN cmake -DIce_HOME=/usr/lib/x86_64-linux-gnu/ -DBUILD_ANALYSIS=ON -DBUILD_PIPELINE=ON -DBUILD_COMPONENTS=ON -DBUILD_ANALYSIS=ON -DBUILD_SERVICES=OFF -DCMAKE_BUILD_TYPE=Release ..
 RUN make
 RUN make install
+FROM scratch
+COPY --from=buildenv / /
+
