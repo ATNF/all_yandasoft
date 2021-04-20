@@ -20,6 +20,7 @@ RUN ./git-do clone -m gitlab -b $BRANCH
 RUN mkdir build
 WORKDIR /home/all_yandasoft/build
 RUN cmake -DIce_HOME=/usr/lib/x86_64-linux-gnu/ -DBUILD_ANALYSIS=ON -DBUILD_PIPELINE=ON -DBUILD_COMPONENTS=ON -DBUILD_ANALYSIS=ON -DBUILD_SERVICES=OFF -DCMAKE_BUILD_TYPE=Release ..
-RUN make
+RUN make -j4 yandasoft
+RUN make 
 RUN make install
 
