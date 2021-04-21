@@ -1,4 +1,4 @@
-FROM registry.gitlab.com/askapsdp/all_yandasoft:intermediate as image1
+FROM registry.gitlab.com/askapsdp/all_yandasoft:latest as image1
 FROM pawsey/mpich-base:3.1.4_ubuntu18.04
 RUN apt-get update \
     && apt-get upgrade -y \
