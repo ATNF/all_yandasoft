@@ -32,4 +32,3 @@ RUN apt-get update \
 COPY --from=image1 /usr/local/bin/* /usr/local/bin/
 COPY --from=image1 /usr/local/lib/* /usr/local/lib/
 COPY --from=image1 /usr/local/share/casacore /usr/local/share/casacore
-COPY --from=image1 /usr/local/share/cmake-3.17 /usr/local/share/cmake-3.17
