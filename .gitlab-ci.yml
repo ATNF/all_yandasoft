@@ -10,6 +10,7 @@ image: registry.gitlab.com/askapsdp/base-image/yandabase:2.3
 # cache is used to specify a list of files and directories which should be cached between jobs. You can only use paths that are within the project workspace.
 
 variables:
+  VERSION: "1.1.x"
   YANDASOFT_BRANCH: develop
   DOCKER_REGISTRY_HOST: registry.gitlab.com
   DOCKER_REGISTRY_FOLDER: askapsdp
@@ -70,10 +71,10 @@ build_docker_image:
     - cd docker 
     - >
       if [ "$CI_COMMIT_BRANCH" = develop ]; then
-        DOCKER_TAG=latest
+        DOCKER_TAG=${VERSION}-latest
         DOCKER_BUILD=TRUE
       elif [ "$CI_COMMIT_BRANCH" = master ]; then
-        DOCKER_TAG=stable
+        DOCKER_TAG=${VERSION}-stable
         DOCKER_BUILD=TRUE
       fi
     - >
