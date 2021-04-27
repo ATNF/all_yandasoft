@@ -1,4 +1,4 @@
-FROM registry.gitlab.com/askapsdp/base-image/yandabase:2.3 as buildenv
+FROM registry.gitlab.com/askapsdp/base-image/yandabase:2.4 as buildenv
 RUN apt-get update --fix-missing
 RUN apt-get upgrade -y
 ENV DEBIAN_FRONTEND=noninteractive
