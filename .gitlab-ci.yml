@@ -1,6 +1,6 @@
 # GitLab CI n conjunction with GitLab Runner can use Docker Engine to test and build any application.
 # Docker, when used with GitLab CI, runs each job in a separate and isolated container using the predefined image that is set up in .gitlab-ci.yml.
-image: registry.gitlab.com/askapsdp/base-image/yandabase:2.3
+image: registry.gitlab.com/askapsdp/base-image/yandabase:2.4
 
 .common: {tags: [azure]}
 .common_docker:
