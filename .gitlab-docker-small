@@ -1,0 +1,34 @@
+FROM registry.gitlab.com/askapsdp/all_yandasoft:latest as image1
+FROM pawsey/mpich-base:3.1.4_ubuntu18.04
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends  \
+        libboost-filesystem-dev \
+        libboost-python-dev \
+        libboost-program-options-dev \
+        libboost-regex-dev \
+        libboost-signals-dev \
+        libboost-system-dev \
+        libboost-thread-dev \
+        libcfitsio-dev \
+        libcppunit-dev \
+        libcurl4-openssl-dev \
+        libczmq-dev \
+        libfftw3-dev \
+        libffi-dev \
+        libgsl-dev \
+        libhdf5-serial-dev \
+        liblapacke-dev \
+        liblog4cxx-dev \
+        libncurses5-dev \
+        libopenblas-dev \
+        libpython2.7-dev \
+        libpython3-dev \
+        libreadline-dev \
+        libxerces-c-dev \
+        libzmq3-dev \
+        wcslib-dev \
+    && rm -rf /var/lib/apt/lists/* 
+COPY --from=image1 /usr/local/bin/* /usr/local/bin/
+COPY --from=image1 /usr/local/lib/* /usr/local/lib/
+COPY --from=image1 /usr/local/share/casacore /usr/local/share/casacore

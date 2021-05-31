@@ -1,6 +1,6 @@
 # GitLab CI n conjunction with GitLab Runner can use Docker Engine to test and build any application.
 # Docker, when used with GitLab CI, runs each job in a separate and isolated container using the predefined image that is set up in .gitlab-ci.yml.
-image: registry.gitlab.com/askapsdp/all_yandasoft:base
+image: registry.gitlab.com/askapsdp/base-image/yandabase:2.4
 
 .common: {tags: [azure]}
 .common_docker:
@@ -10,6 +10,7 @@ image: registry.gitlab.com/askapsdp/all_yandasoft:base
 # cache is used to specify a list of files and directories which should be cached between jobs. You can only use paths that are within the project workspace.
 
 variables:
+  VERSION: "1.1.x"
   YANDASOFT_BRANCH: develop
   DOCKER_REGISTRY_HOST: registry.gitlab.com
   DOCKER_REGISTRY_FOLDER: askapsdp
@@ -44,7 +45,7 @@ build:
         - mkdir build
         - cd build
         - cmake ..  -DIce_HOME=/usr/lib/x86_64-linux-gnu/ -DBUILD_ANALYSIS=ON -DBUILD_PIPELINE=ON -DBUILD_COMPONENTS=ON -DBUILD_ANALYSIS=ON -DBUILD_SERVICES=OFF -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-coverage" -DCMAKE_EXE_LINKER_FLAGS="-coverage" -DCMAKE_INSTALL_PREFIX=/builds/ASKAPSDP/install
-        - cmake --build . -j $n_cpus
+        - cmake --build . -j $n_cpus 
     artifacts:
         when: always
         expire_in: 1 week
@@ -68,17 +69,20 @@ build_docker_image:
     - BRANCH=${CI_COMMIT_TAG:-${CI_COMMIT_BRANCH}}
     - DOCKER_TAG=$BRANCH
     - DOCKER_BUILD=FALSE
+    - mkdir docker
+    - cd docker 
     - >
       if [ "$CI_COMMIT_BRANCH" = develop ]; then
-        DOCKER_TAG=latest
+        DOCKER_TAG=${VERSION}-latest
         DOCKER_BUILD=TRUE
       elif [ "$CI_COMMIT_BRANCH" = master ]; then
-        DOCKER_TAG=stable
+        DOCKER_TAG=${VERSION}-stable
         DOCKER_BUILD=TRUE
       fi
     - >
       if [ "$DOCKER_BUILD" = TRUE ]; then
-        docker build -t $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/all_yandasoft:$DOCKER_TAG --build-arg BRANCH=${YANDASOFT_BRANCH} -f .gitlab-docker .
+        docker build -t $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/all_yandasoft:$DOCKER_TAG --build-arg BRANCH=${YANDASOFT_BRANCH} -f ../.gitlab-docker .
+        docker build -t $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/all_yandasoft:${DOCKER_TAG}-slim -f ../.gitlab-docker-small .
         docker push $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/all_yandasoft:$DOCKER_TAG
       fi
 
