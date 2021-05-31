@@ -33,8 +33,8 @@
 # Currently, we target generic HPCs and a specific HPC: Galaxy.
 # When a specific machine target is chosen, MPI target is ignored.
 # Choose one or both of this list of target.
-# machine_targets = ["generic", "galaxy"]
-machine_targets = ["generic"]
+machine_targets = ["generic", "galaxy"]
+# machine_targets = ["generic"]
 
 # Set MPI implementations for generic machine in the list below.
 # Note that a specific machine requires no MPI specification.
@@ -49,11 +49,12 @@ machine_targets = ["generic"]
 # Choose a subset (or all) of this complete list of targets:
 # mpi_targets = ["mpich", "mpich-3.3.2", "openmpi", "openmpi-4.1.0", "openmpi-3.1.6", "openmpi-2.1.6", "openmpi-1.10.7"]
 mpi_targets = ["mpich", "openmpi-4.1.0", "openmpi-3.1.6", "openmpi-2.1.6"]
+# mpi_targets = ["mpich", "openmpi-4.1.0"]
 
 # This is for automatic build of "develop" branch
-# git_branch = "develop"
+git_branch = "develop"
 # This is for manual build of release tag
-git_branch = "release/1.1.0"
+#git_branch = "release/1.1.0"
 # This is not needed anymore (has been replaced by release tag)
 # git_branch = "master"
 
