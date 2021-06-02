@@ -1,13 +1,19 @@
 # This file is automatically created by make_docker_images.py
-FROM csirocass/yandabase:openmpi3 as buildenv
-# Build yandasoft
+# Build Yandasoft
+FROM csirocass/yandabase:openmpi3 AS build_image 
 WORKDIR /home
 RUN git clone https://gitlab.com/ASKAPSDP/all_yandasoft.git
 WORKDIR /home/all_yandasoft
 RUN ./git-do clone
-RUN ./git-do checkout -b develop
+RUN ./git-do checkout -b master
+# To fix version problem, use develop branch in askap-cmake 
+WORKDIR /home/all_yandasoft/askap-cmake 
+RUN git checkout develop 
+WORKDIR /home/all_yandasoft 
 RUN mkdir build
 WORKDIR /home/all_yandasoft/build
-RUN cmake -DCMAKE_CXX_COMPILER=mpicxx -DCMAKE_CXX_FLAGS="-I/usr/local/include -pthread" -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENMP=YES -DBUILD_ANALYSIS=OFF -DBUILD_PIPELINE=OFF -DBUILD_COMPONENTS=OFF -DBUILD_SERVICES=OFF .. \
+RUN cmake -DCMAKE_CXX_COMPILER=mpicxx -DCMAKE_CXX_FLAGS="-I/usr/local/include -pthread" -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENMP=YES -DBUILD_ANALYSIS=ON -DBUILD_PIPELINE=OFF -DBUILD_COMPONENTS=OFF -DBUILD_SERVICES=OFF .. \
     && make -j7 \
     && make install
+WORKDIR /home 
+CMD ["/bin/bash"] 

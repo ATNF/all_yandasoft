@@ -31,14 +31,9 @@ machine_targets = ["generic"]
 # Set MPI implementations for generic machine in the list below.
 # Note that a specific machine requires no MPI specification.
 # Choose a subset (or all) of this complete list of targets:
-# mpi_targets = ["mpich", "openmpi4", "openmpi3", "openmpi2", "openmpi2.0"]
-# mpi_targets = ["openmpi4", "openmpi3", "openmpi2"]
-# mpi_targets = ["openmpi4"]
-mpi_targets = ["mpich"]
+mpi_targets = ["mpich", "openmpi4", "openmpi3", "openmpi2", "openmpi2.0"]
 
-# cmake_ver = "3.18.4"
-# cmake_ver = "3.19.6"
-cmake_ver = "3.20.2"
+cmake_ver = "3.20.3"
 
 casacore_ver = "3.3.0"
 
@@ -84,15 +79,25 @@ forbidden_chars = list(forbidden_chars_string)
 machine_targets = list(map(str.lower, machine_targets))
 mpi_targets = list(map(str.lower, mpi_targets))
 
+# The library names are valid for Ubuntu18.04
 library_list = [
     "libboost-dev",   
     "libboost-filesystem-dev", 
-    "libboost-python-dev", 
     "libboost-program-options-dev", 
+    "libboost-python-dev", 
     "libboost-regex-dev",  
     "libboost-signals-dev",
     "libboost-system-dev",  
-    "libboost-thread-dev",   
+    "libboost-thread-dev",
+    # Use these libboost names instead for Ubuntu20.04
+    # "libboost1.67-dev",   
+    # "libboost-filesystem1.67-dev", 
+    # "libboost-program-options1.67-dev", 
+    # "libboost-python1.67-dev", 
+    # "libboost-regex1.67-dev",  
+    # "libboost-signals1.67-dev",
+    # "libboost-system1.67-dev",  
+    # "libboost-thread1.67-dev",   
     "libcfitsio-dev",
     "libcppunit-dev",
     "libcurl4-openssl-dev",
@@ -101,6 +106,8 @@ library_list = [
     "libffi-dev",     
     "libgsl-dev",        
     "libhdf5-serial-dev", 
+    # Use this library instead for Ubuntu20.04
+    # "libhdf5-dev", 
     "liblapacke-dev",
     "liblog4cxx-dev", 
     "libncurses5-dev",
@@ -113,6 +120,7 @@ library_list = [
     "wcslib-dev"
     ]
 
+# The tool names are valid for Ubuntu18.04
 tool_list = [
     "autoconf",
     "automake",
@@ -131,6 +139,10 @@ tool_list = [
     "python-numpy",
     "python-pip",          
     "python-scipy",
+    # Use this python instead for Ubuntu20.04
+    # "python3-numpy",
+    # "python3-pip",          
+    # "python3-scipy",
     "subversion",          
     "tzdata",
     "valgrind",
@@ -449,6 +461,10 @@ def make_big_yandasoft_recipe(base_image, git_branch):
         "WORKDIR /home/all_yandasoft\n"
         "RUN ./git-do clone\n"
         "RUN ./git-do checkout -b " + git_branch + "\n"
+        "# To fix version problem, use develop branch in askap-cmake \n"
+        "WORKDIR /home/all_yandasoft/askap-cmake \n"
+        "RUN git checkout develop \n"
+        "WORKDIR /home/all_yandasoft \n"
         "RUN mkdir build\n"
         "WORKDIR /home/all_yandasoft/build\n"
         "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " " + cmake_build_flags + " .. \\\n"
@@ -520,10 +536,39 @@ def make_yandasoft(machine, mpi, prepend, append, git_branch, execute):
         raise ValueError("Unknown machine target:", machine)
     recipe = make_big_yandasoft_recipe(base_image, git_branch)
 
-    # If this is release version, add recipe for small image.
-    # Note that image name is different for release and dev version.
-    if git_branch[0:7] == "release":
-        version = git_branch[8:11]  # TODO: Replace this with better way
+    if git_branch == "develop":
+        if machine == "generic":
+            docker_target.set_recipe_name(
+                ".gitlab-docker-yandasoft-dev-" + mpi)
+            docker_target.set_image_name(prepend + "yandasoft:dev-" + 
+                mpi + append)
+        elif (machine == "galaxy"):
+            docker_target.set_recipe_name(
+                ".gitlab-docker-yandasoft-dev-" + machine)
+            docker_target.set_image_name(prepend + "yandasoft:dev-" + 
+                machine + append)
+        else:
+            raise ValueError("Unknown machine target:", machine)
+    elif git_branch == "master":
+        if machine == "generic":
+            docker_target.set_recipe_name(
+                ".gitlab-docker-yandasoft-" + mpi)
+            docker_target.set_image_name(prepend + "yandasoft:" + 
+                mpi + append)
+        elif (machine == "galaxy"):
+            docker_target.set_recipe_name(
+                ".gitlab-docker-yandasoft-" + machine)
+            docker_target.set_image_name(prepend + "yandasoft:" + 
+                machine + append)
+        else:
+            raise ValueError("Unknown machine target:", machine)
+    else:
+        # Release tag
+        # Extract MAJOR.MINOR version from the release tag.
+        # TODO: This only works for single digits (eg. 1.2)
+        #       Find a more general method (eg. 12.34).
+        #       Abort if version numbers cannot be extracted.
+        version = git_branch[0:3]
         if machine == "generic":
             base_image = ("csirocass/base:" + mpi)
             docker_target.set_recipe_name(".gitlab-docker-yandasoft-" + 
@@ -540,19 +585,6 @@ def make_yandasoft(machine, mpi, prepend, append, git_branch, execute):
             raise ValueError("Unknown machine target:", machine)
         recipe += make_small_yandasoft_recipe(base_image)
 
-    else:  # Anything other than release
-        if machine == "generic":
-            docker_target.set_recipe_name(
-                ".gitlab-docker-yandasoft-dev-" + mpi)
-            docker_target.set_image_name(prepend + "yandasoft:dev-" + 
-                mpi + append)
-        elif (machine == "galaxy"):
-            docker_target.set_recipe_name(
-                ".gitlab-docker-yandasoft-dev-" + machine)
-            docker_target.set_image_name(prepend + "yandasoft:dev-" + 
-                machine + append)
-        else:
-            raise ValueError("Unknown machine target:", machine)
 
     recipe_end = (
         "WORKDIR /home \n"
@@ -632,15 +664,11 @@ def main():
         epilog="The targets can be changed from inside the script " +
             "(the SETTINGS section)")
     parser.add_argument('image', help='Either "yandabase" or "yandasoft"', type=str)
-    parser.add_argument('-g', '--git_branch', help='Default: "develop"', type=str,
-        default="develop")
-    parser.add_argument('-x', '--execute', help='Actually create the image', 
-        action='store_true')
+    parser.add_argument('-g', '--git_branch', default="master", type=str,
+        help='Possible values: "master" (default), "develop", release tag number (eg. "1.2.3")')
+    parser.add_argument('-x', '--execute', action='store_true',
+        help='Actually create the image. Otherwise only Docker recipe is produced.')
     args = parser.parse_args()
-
-    # if args.show_targets_only:
-    #     show_targets()
-    #     sys.exit(0)
 
     git_branch = args.git_branch
     image = args.image
