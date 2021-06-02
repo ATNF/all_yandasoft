@@ -19,6 +19,8 @@ variables:
   DOCKER_TLS_CERTDIR: "/certs"
   CONTAINER_TEST_IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   CONTAINER_RELEASE_IMAGE: $CI_REGISTRY_IMAGE:latest
+  DOCKERHUB_REG: docker.io
+  DOCKERHUB_REG_IMAGE: index.docker.io/csirocass/yandasoft
 
 stages:
   - build
@@ -82,8 +84,50 @@ build_docker_image:
         docker build -t $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/all_yandasoft:$DOCKER_TAG --build-arg BRANCH=${YANDASOFT_BRANCH} -f ../.gitlab-docker .
         docker build -t $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/all_yandasoft:${DOCKER_TAG}-slim -f ../.gitlab-docker-small .
         docker push $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/all_yandasoft:$DOCKER_TAG
-        docker push $DOCKER_REGISTRY_HOST/$DOCKER_REGISTRY_FOLDER/all_yandasoft:${DOCKER_TAG}-slim
-      fi      
+      fi
+
+build_docker_image_galaxy:
+  # Build and push docker image from develop branch for Galaxy
+  stage: build_docker_image
+  extends:
+    # - .common
+    - .common_docker
+  variables:
+    IMAGE_TARGET: galaxy
+    IMAGE_NAME: $DOCKERHUB_REG_IMAGE:dev-$IMAGE_TARGET
+  script:
+    - docker login -u $DOCKERHUB_REG_USER -p $DOCKERHUB_REG_PASSWORD $DOCKERHUB_REG
+    - docker build -t $IMAGE_NAME -f .gitlab-docker-yandasoft-$IMAGE_TARGET .
+    - docker push $IMAGE_NAME
+
+build_docker_image_mpich:
+  # Build and push docker image from develop branch for MPICH
+  stage: build_docker_image
+  extends:
+    # - .common
+    - .common_docker
+  variables:
+    IMAGE_TARGET: mpich
+    IMAGE_NAME: $DOCKERHUB_REG_IMAGE:dev-$IMAGE_TARGET
+  script:
+    - docker login -u $DOCKERHUB_REG_USER -p $DOCKERHUB_REG_PASSWORD $DOCKERHUB_REG
+    - docker build -t $IMAGE_NAME -f .gitlab-docker-yandasoft-$IMAGE_TARGET .
+    - docker push $IMAGE_NAME
+
+build_docker_image_openmpi4:
+  # Build and push docker image from develop branch for OpenMPI4
+  stage: build_docker_image
+  extends:
+    # - .common
+    - .common_docker
+  variables:
+    IMAGE_TARGET: openmpi4
+    IMAGE_NAME: $DOCKERHUB_REG_IMAGE:dev-$IMAGE_TARGET
+  script:
+    - docker login -u $DOCKERHUB_REG_USER -p $DOCKERHUB_REG_PASSWORD $DOCKERHUB_REG
+    - docker build -t $IMAGE_NAME -f .gitlab-docker-yandasoft-$IMAGE_TARGET .
+    - docker push $IMAGE_NAME
+
 test:
   extends: .common
   stage: test

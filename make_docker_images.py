@@ -1,27 +1,19 @@
 #!/usr/bin/env python3
 #
-# Create Docker images for all cases as specified in the settings below.
-# Possible targets are:
-# - Specific machine (currently only Galaxy, with Cray MPICH)
-# - Generic machine, with these MPI implementations
+# This script creates a number of sets of Docker images for Yandasoft. 
+# One set consists of a variety of MPI implementations:
+# - Generic machine, with these MPI:
 #   - MPICH
-#   - OpenMPI of various versions
+#   - OpenMPI of versions 4, 3 and 2
+# - Specific machine: Galaxy (This is actually MPICH)
 #
-# Note that the images are split into base image (for components that are 
-# seldom changed) and the final image (Yandasoft).
-# This is done for deployment efficiency.
-#
-# Usage:
-# 1) Make sure that the targets are correct (see SETTINGS section below).
-# 2) Execute the script.
-#    If you want only the final images (since base image is still the same):
-#    ./make_docker_image.py -f
-#
-#    If you want to make both base and final images:
-#    ./make_docker_image.py -bf
-#
-#    If you want no image, just Dockerfiles, for example for dry run: 
-#    ./make_docker_image.py
+# The sets are as follows:
+# - Yandabase: Contains components that are seldom changed.
+#   Since building the entire code is time consuming, it makes sense to
+#   prebuild this part. This can then used as the base for the following.
+# - Yandasoft: This is the final product, which can be either:
+#   - Released version: Built from a formally released code base
+#   - Develop version: The latest in "develop" git branch.
 #
 # Author: Paulus Lahur <paulus.lahur@csiro.au>
 # Copyright: CSIRO 2020
@@ -33,36 +25,28 @@
 # Currently, we target generic HPCs and a specific HPC: Galaxy.
 # When a specific machine target is chosen, MPI target is ignored.
 # Choose one or both of this list of target.
-#machine_targets = ["generic", "galaxy"]
+# machine_targets = ["generic", "galaxy"]
 machine_targets = ["generic"]
 
 # Set MPI implementations for generic machine in the list below.
 # Note that a specific machine requires no MPI specification.
-# The format of the MPI specification is:
-#     mpi_type[-X.Y.Z]
-# where
-# - mpi_type is either "mpich" or "openmpi".
-# - X, Y and Z are version numbers (major, minor and revision).
-# When the numbers are specified, MPI library will be built from source code.
-# When they are not, the default version from the base OS will be installed
-# using the simplest method (apt-get install).
 # Choose a subset (or all) of this complete list of targets:
-# mpi_targets = ["mpich", "mpich-3.3.2", "openmpi", "openmpi-4.0.5", "openmpi-3.1.6", "openmpi-2.1.6", "openmpi-1.10.7"]
-#mpi_targets = ["mpich", "openmpi-3.1.6", "openmpi-2.1.6"]
-mpi_targets = ["openmpi-3.1.6"]
+mpi_targets = ["mpich", "openmpi4", "openmpi3", "openmpi2", "openmpi2.0"]
 
-#git_branch = "release/1.1.0"
-git_branch = "develop"
-#git_branch = "master"
+cmake_ver = "3.20.3"
 
 casacore_ver = "3.3.0"
+
+# Account name for storing images in DockerHub
+docker_account = "csirocass"
+
+mode = "normal"
+# mode = "experiment"
 
 #------------------------------------------------------------------------------
 # TODO: Add logging
 # TODO: Add timing
 # TODO: Add error handling, as this is going to be used within CI/CD
-# Consider checking whether all files to be downloaded actually exist!
-# TODO: Slim down the image. Some dev stuff can be removed from final image.
 
 import sys
 import argparse
@@ -74,12 +58,8 @@ from pathlib import Path
 nproc_available = os.cpu_count()
 nproc = 1
 if nproc_available > 1:
-    nproc = nproc_available #- 1
-print("nproc:", nproc)
-
-# Git repository of Yandasoft. 
-# No longer needed, as this is set directly downstream now.
-# git_repository = "https://github.com/ATNF/yandasoft.git"
+    nproc = nproc_available - 1
+# print("The number of CPU cores used:", nproc)
 
 # Header for all automatically generated Dockerfiles
 header = ("# This file is automatically created by " + __file__ + "\n")
@@ -98,6 +78,80 @@ forbidden_chars = list(forbidden_chars_string)
 # Sanitizing parameters
 machine_targets = list(map(str.lower, machine_targets))
 mpi_targets = list(map(str.lower, mpi_targets))
+
+# The library names are valid for Ubuntu18.04
+library_list = [
+    "libboost-dev",   
+    "libboost-filesystem-dev", 
+    "libboost-program-options-dev", 
+    "libboost-python-dev", 
+    "libboost-regex-dev",  
+    "libboost-signals-dev",
+    "libboost-system-dev",  
+    "libboost-thread-dev",
+    # Use these libboost names instead for Ubuntu20.04
+    # "libboost1.67-dev",   
+    # "libboost-filesystem1.67-dev", 
+    # "libboost-program-options1.67-dev", 
+    # "libboost-python1.67-dev", 
+    # "libboost-regex1.67-dev",  
+    # "libboost-signals1.67-dev",
+    # "libboost-system1.67-dev",  
+    # "libboost-thread1.67-dev",   
+    "libcfitsio-dev",
+    "libcppunit-dev",
+    "libcurl4-openssl-dev",
+    "libczmq-dev",
+    "libfftw3-dev",
+    "libffi-dev",     
+    "libgsl-dev",        
+    "libhdf5-serial-dev", 
+    # Use this library instead for Ubuntu20.04
+    # "libhdf5-dev", 
+    "liblapacke-dev",
+    "liblog4cxx-dev", 
+    "libncurses5-dev",
+    "libopenblas-dev",        
+    "libpython2.7-dev", 
+    "libpython3-dev", 
+    "libreadline-dev",
+    "libxerces-c-dev",
+    "libzmq3-dev",
+    "wcslib-dev"
+    ]
+
+# The tool names are valid for Ubuntu18.04
+tool_list = [
+    "autoconf",
+    "automake",
+    "bison",
+    "docker",       
+    "flex",
+    "g++",
+    "gcovr",
+    "gdb",
+    "gfortran",
+    "git",
+    "libtool",      
+    "m4",
+    "make",
+    "patch",           
+    "python-numpy",
+    "python-pip",          
+    "python-scipy",
+    # Use this python instead for Ubuntu20.04
+    # "python3-numpy",
+    # "python3-pip",          
+    # "python3-scipy",
+    "subversion",          
+    "tzdata",
+    "valgrind",
+    "vim",
+    "wget",     
+    "xsltproc",
+    "zeroc-ice-all-dev",
+    "zeroc-ice-all-runtime"
+    ]
 
 
 def is_proper_name(name):
@@ -210,8 +264,6 @@ def get_mpi_type_and_version(mpi_name):
     '''
     Given the full name of MPI, return MPI type (mpich / openmpi)
     and the version as a list of 3 integers.
-    When the version is not specified, the simplest version to install 
-    is chosen (ie. using "apt-get install").
     Input should be in one of these formats:
     - mpich
     - openmpi
@@ -264,254 +316,126 @@ def get_mpi_type_and_version(mpi_name):
 
 
 
-def make_base_image(machine, mpi, prepend, append, actual):
+def make_yandabase(machine, mpi, prepend, append, execute):
     '''
     Make base image for components that are seldom changed:
-    base OS, upgrades, standard libraries and apps, MPI, Casacore and Casarest.
+    base OS, upgrades, standard libraries and apps, Casacore and Casarest.
+    TO DO: Move LOFAR here from Yandasoft.
     '''
     docker_target = DockerClass()
 
-    # First, make Dockerfile, which is composed of:
-    # - Common header
-    # - Base system part
-    # - Common top part
-    # - MPI part
-    # - Common bottom part
-
-    # Construct common top part
-
+    # Install libraries and dev tools
     apt_install_part = (
-    "ENV DEBIAN_FRONTEND=\"noninteractive\"\n"
-    "RUN apt-get update \\\n"
-    "    && apt-get upgrade -y \\\n"
-    "    && apt-get autoremove -y \\\n"
-    "    && apt-get install -y"
-    )
-
-    # Applications to install, as packaged in the base system.
-    # Note that most have the default versions as set by the base system.
-    # TODO: Remove stuff that is not needed
-    apt_install_items = [
-    "g++",
-    "gfortran",
-    "m4",
-    "autoconf",
-    "automake",
-    "libtool",      
-    "flex",
-    "bison",
-    "make",
-    "libncurses5-dev",
-    "libreadline-dev",
-    "libopenblas-dev",        
-    "liblapacke-dev",
-    "libcfitsio-dev",
-    "wcslib-dev",
-    "libhdf5-serial-dev", 
-    "libfftw3-dev",
-    "libpython2.7-dev", 
-    "libpython3-dev", 
-    "python-pip",          
-    "python-numpy",
-    "python-scipy",
-    "libboost-python-dev", 
-    "libboost-dev",   
-    "libboost-filesystem-dev", 
-    "libboost-program-options-dev", 
-    "libboost-signals-dev",
-    "libboost-system-dev",  
-    "libboost-thread-dev",   
-    "libboost-regex-dev",  
-    "libcppunit-dev",  
-    "git",
-    "libffi-dev",     
-    "libgsl-dev",        
-    "liblog4cxx-dev", 
-    "patch",           
-    "subversion",          
-    "wget",     
-    "docker",       
-    "libxerces-c-dev",
-    "libcurl4-openssl-dev",
-    "xsltproc",
-    "gcovr",
-    "libzmq3-dev"]
-
-    for apt_install_item in apt_install_items:
+        "ENV DEBIAN_FRONTEND=\"noninteractive\"\n"
+        "RUN apt-get update -q \\\n"
+        "    && apt-get upgrade -y \\\n"
+        "    && apt-get install -y --no-install-recommends "
+        )
+    apt_install_list = library_list + tool_list
+    for apt_install_item in apt_install_list:
         apt_install_part += " \\\n" + "        " + apt_install_item
+    # apt_install_part += "\n"
     apt_install_part += "\\\n"
-    apt_install_part += "    && rm -rf /var/lib/apt"
+    # apt_install_part += "    && apt-get autoremove -y \\\n"
+    apt_install_part += "    && rm -rf /var/lib/apt/lists/* \n"
 
-    # cmake_ver = "3.17.2"
-    cmake_ver = "3.18.4"
     cmake_source = "cmake-" + cmake_ver + ".tar.gz"
 
-    common_top_part = (
-    apt_install_part +
-    "# Build the latest cmake\n"
-    "RUN mkdir /usr/local/share/cmake\n"
-    "WORKDIR /usr/local/share/cmake\n"
-    "RUN wget https://github.com/Kitware/CMake/releases/download/v" + cmake_ver + "/" + cmake_source + " \\\n"
-    "    && tar -zxf " + cmake_source + " \\\n"
-    "    && rm " + cmake_source + "\n"
-    "WORKDIR /usr/local/share/cmake/cmake-" + cmake_ver + "\n"
-    "RUN ./bootstrap --system-curl \\\n"
-    "    && make \\\n"
-    "    && make install\n"
-    )
+    recipe = (
+        apt_install_part +
+        "# Build cmake\n"
+        "RUN mkdir /usr/local/share/cmake\n"
+        "WORKDIR /usr/local/share/cmake\n"
+        "RUN wget https://github.com/Kitware/CMake/releases/download/v" + cmake_ver + "/" + cmake_source + " \\\n"
+        "    && tar -zxf " + cmake_source + " \\\n"
+        "    && rm " + cmake_source + "\n"
+        "WORKDIR /usr/local/share/cmake/cmake-" + cmake_ver + "\n"
+        "RUN ./bootstrap --system-curl -- -DCMAKE_BUILD_TYPE:STRING=Release \\\n"
+        "    && make \\\n"
+        "    && make install\\\n"
+        "    && rm -rf * \n"
+        "# Build the latest measures\n"
+        "RUN mkdir /usr/local/share/casacore \\\n"
+        "    && mkdir /usr/local/share/casacore/data\n"
+        "WORKDIR /usr/local/share/casacore/data\n"
+        "RUN wget ftp://ftp.astron.nl/outgoing/Measures/WSRT_Measures.ztar \\\n"
+        "    && mv WSRT_Measures.ztar WSRT_Measures.tar.gz \\\n"
+        "    && tar -zxf WSRT_Measures.tar.gz \\\n"
+        "    && rm WSRT_Measures.tar.gz \\\n"
+        "    && mkdir /var/lib/jenkins \\\n"
+        "    && mkdir /var/lib/jenkins/workspace \n"
+        "# Build the latest casacore\n"
+        "WORKDIR /usr/local/share/casacore\n"
+        "RUN wget https://github.com/casacore/casacore/archive/v" + casacore_ver + ".tar.gz \\\n"
+        "    && tar -xzf v" + casacore_ver + ".tar.gz\\\n"
+        "    && rm v" + casacore_ver + ".tar.gz\n"
+        "WORKDIR /usr/local/share/casacore/casacore-" + casacore_ver + "\n"
+        "RUN mkdir build\n"
+        "WORKDIR build\n"
+        "RUN cmake " + cmake_cxx_compiler + " -DUSE_FFTW3=ON -DDATA_DIR=/usr/local/share/casacore/data \\\n"
+        "    -DUSE_OPENMP=ON -DUSE_HDF5=ON -DBUILD_PYTHON=ON -DUSE_THREADS=ON -DCMAKE_BUILD_TYPE=Release .. \\\n"
+        "    && make -j" + str(nproc) + " \\\n"
+        "    && make install\n"
+        "WORKDIR /usr/local/share/casacore/\n"
+        "RUN wget https://github.com/steve-ord/casarest/tarball/078f94e \\\n"
+        "    && tar -xzf 078f94e \\\n"
+        "    && rm 078f94e\n"
+        "WORKDIR steve-ord-casarest-078f94e\n"
+        "RUN mkdir build\n"
+        "WORKDIR build\n"
+        "RUN cmake " + cmake_cxx_compiler + " -DCMAKE_BUILD_TYPE=Release .. \\\n"
+        "    && make -j" + str(nproc) + " \\\n"
+        "    && make install \n"
+        "WORKDIR /usr/local/share/casacore\n"
+        "RUN rm -rf casacore \\\n"
+        #"    && rm -rf casarest \\\n"
+        "    && rm -rf steve-ord-casarest-078f94e \n"
+        # "    && apt-get clean \n"
+        # "# Build LOFAR\n"
+        # "WORKDIR /usr/local/share\n"
+        # "RUN mkdir LOFAR\n"
+        # "WORKDIR /usr/local/share/LOFAR\n"
+        # "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-common.git\n"
+        # "WORKDIR /usr/local/share/LOFAR/lofar-common\n"
+        # "RUN git checkout develop \n"
+        # "RUN mkdir build\n"
+        # "WORKDIR /usr/local/share/LOFAR/lofar-common/build\n"
+        # "RUN cmake " + cmake_cxx_compiler + " -DCMAKE_CXX_FLAGS=\"-I/usr/local/include -pthread\" \\\n"
+        # "    -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENMP=YES .. \\\n"
+        # "    && make -j" + str(nproc) + " \\\n"
+        # "    && make install\n"
+        # "WORKDIR /usr/local/share/LOFAR\n"
+        # "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-blob.git\n"
+        # "WORKDIR /usr/local/share/LOFAR/lofar-blob\n"
+        # "RUN git checkout develop \n"
+        # "RUN mkdir build\n"
+        # "WORKDIR /usr/local/share/LOFAR/lofar-blob/build\n"
+        # "RUN cmake " + cmake_cxx_compiler + " -DCMAKE_CXX_FLAGS=\"-I/usr/local/include -pthread\" \\\n"
+        # "    -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENMP=YES .. \\\n"
+        # "    && make -j" + str(nproc) + " \\\n"
+        # "    && make install\n"
+        # "# Clean up\n"
+        # "RUN apt-get autoremove -y \\\n"
+        # "    && rm -rf /var/lib/apt \n"
+        )
 
-    common_bottom_part = (
-    "# Build the latest measures\n"
-    "RUN mkdir /usr/local/share/casacore \\\n"
-    "    && mkdir /usr/local/share/casacore/data\n"
-    "WORKDIR /usr/local/share/casacore/data\n"
-    "RUN wget ftp://ftp.astron.nl/outgoing/Measures/WSRT_Measures.ztar \\\n"
-    "    && mv WSRT_Measures.ztar WSRT_Measures.tar.gz \\\n"
-    "    && tar -zxf WSRT_Measures.tar.gz \\\n"
-    "    && rm WSRT_Measures.tar.gz \\\n"
-    "    && mkdir /var/lib/jenkins \\\n"
-    "    && mkdir /var/lib/jenkins/workspace \n"
-    "# Build the latest casacore\n"
-    "WORKDIR /usr/local/share/casacore\n"
-    "RUN wget https://github.com/casacore/casacore/archive/v" + casacore_ver + ".tar.gz \\\n"
-    "    && tar -xzf v" + casacore_ver + ".tar.gz\\\n"
-    "    && rm v" + casacore_ver + ".tar.gz\n"
-    "WORKDIR /usr/local/share/casacore/casacore-" + casacore_ver + "\n"
-    #"RUN git clone https://github.com/casacore/casacore.git \n"
-    #"WORKDIR /usr/local/share/casacore/casacore \n"
-    "RUN mkdir build\n"
-    "WORKDIR build\n"
-    "RUN cmake " + cmake_cxx_compiler + " -DUSE_FFTW3=ON -DDATA_DIR=/usr/local/share/casacore/data \\\n"
-    "    -DUSE_OPENMP=ON -DUSE_HDF5=ON -DBUILD_PYTHON=ON -DUSE_THREADS=ON -DCMAKE_BUILD_TYPE=Release .. \\\n"
-    "    && make -j" + str(nproc) + " \\\n"
-    "    && make install\n"
-    "WORKDIR /usr/local/share/casacore/\n"
-    #"RUN git clone https://github.com/casacore/casarest.git \n"
-    #"WORKDIR /usr/local/share/casacore/casarest \n"
-    "RUN wget https://github.com/steve-ord/casarest/tarball/078f94e \\\n"
-    "    && tar -xzf 078f94e \\\n"
-    "    && rm 078f94e\n"
-    "WORKDIR steve-ord-casarest-078f94e\n"
-    "RUN mkdir build\n"
-    "WORKDIR build\n"
-    "RUN cmake " + cmake_cxx_compiler + " -DCMAKE_BUILD_TYPE=Release .. \\\n"
-    "    && make -j" + str(nproc) + " \\\n"
-    "    && make install \n"
-    "WORKDIR /usr/local/share/casacore\n"
-    "RUN rm -rf casacore \\\n"
-    #"    && rm -rf casarest \\\n"
-    "    && rm -rf steve-ord-casarest-078f94e \\\n"
-    "    && apt-get clean \n"
-    )
-
-    # Construct MPI part
-    mpi_part = ""
     if machine == "generic":
-        base_system_part = ("FROM ubuntu:bionic as buildenv\n")
-        (mpi_type, mpi_num) = get_mpi_type_and_version(mpi)
-        mpi_ver = compose_version_number(mpi_num)
-
-        if (mpi_type == "mpich"):
-            if (mpi_ver == ""):
-                # if MPICH version is not specified, get the precompiled version
-                mpi_part = (
-                "RUN apt-get install -y libmpich-dev\\\n"
-                "    && rm -rf /var/lib/apt\n"
-                )
-
-            else:
-                # else (if version is specified), download the source from 
-                # website and build           
-                web_dir = "https://www.mpich.org/static/downloads/" + mpi_ver
-
-                # TODO: Check if the version is correct and the file exists
-
-                mpi_part = (
-                "# Build MPICH\n"
-                "WORKDIR /home\n"
-                "RUN wget " + web_dir + "/" + mpi + ".tar.gz \\\n"
-                "    && tar -zxf " + mpi + ".tar.gz\n"
-                "    && rm " + mpi + ".tar.gz \n"
-                "WORKDIR /home/" + mpi + "\n"
-                "RUN ./configure --prefix=" + mpi_dir + " \\\n"
-                "    && make -j" + str(nproc) + " \\\n"
-                "    && make install \n"
-                "ENV PATH=$PATH:" + mpi_dir + "/bin\n"
-                "ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:" + mpi_dir + "/lib\n"
-                # "ENV MPI_INCLUDE_PATH=" + mpi_dir + "/include/mpich\n"
-                )
-
-        elif (mpi_type == "openmpi"):
-            if (mpi_ver == ""):
-                # if OpenMPI version is not specified, get the precompiled 
-                # version
-                #mpi_part = (
-                #"RUN apt-get install -y libopenmpi-dev\\\n"
-                #"    && rm -rf /var/lib/apt\n"
-                #)
-                raise ValueError("OpenMPI version must be specified")
-
-            else:
-                # Download the source from OpenMPI website and build
-                # TODO: Check whether the version number is correct
-                # TODO: Make this works for the case where version number is 
-                #       of generic format!
-                #       Convert from string to a list of 3 integers
-
-                int_ver = split_version_number(mpi_ver)
-                ver_dir = "v" + str(int_ver[0]) + "." + str(int_ver[1])
-                web_dir = ("https://download.open-mpi.org/release/open-mpi/" + 
-                    ver_dir)
-
-                # Note: Enable C++ binding when configuring, because some 
-                # programs use it.
-                # ./configure --enable-mpi-cxx
-
-                mpi_part = (
-                "# Build OpenMPI\n"
-                "WORKDIR /home\n"
-                "RUN wget " + web_dir + "/" + mpi + ".tar.gz \\\n"
-                "    && tar -zxf " + mpi + ".tar.gz \\\n"
-                "    && rm " + mpi + ".tar.gz \n"
-                "WORKDIR /home/" + mpi + "\n"
-                "RUN ./configure --enable-mpi-cxx \\\n"
-                "    && make all -j" + str(nproc) + " \\\n"
-                "    && make install\n"
-                "ENV PATH=/usr/local/bin:$PATH\n"
-                "ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH\n"
-                "ENV MPI_INCLUDE_PATH=\"/usr/local/include\"\n"
-                "ENV MPI_LIBRARIES=\"/usr/local/lib\"\n"
-                "ENV MPI_COMPILE_FLAGS=\"-I/usr/local/include -pthread\"\n" 
-                )
-
-        else:
-            raise ValueError("Unknown MPI target:", mpi)
-
-        if (isinstance(mpi_num, list)):
-            mpi_name = mpi_type + str(mpi_num[0])
-        else:
-            mpi_name = mpi_type 
-        docker_target.set_recipe_name("Dockerfile-yandabase-" + mpi_name)
-        docker_target.set_image_name(prepend + mpi_name + append)
-
+        base_part = ("FROM csirocass/base:" + mpi + " AS base_image \n")
+        docker_target.set_recipe_name(".gitlab-docker-yandabase-" + mpi)
+        docker_target.set_image_name(prepend + "yandabase:" + mpi + append)
     elif (machine == "galaxy"):
-        # Galaxy (of Pawsey) has Docker image with its MPICH implementation 
-        # already baked into an Ubuntu base.
-        # base_system_part = ("FROM pawsey/mpi-base:latest as buildenv\n")
-        base_system_part = ("FROM pawsey/mpich-base:3.1.4_ubuntu18.04 as " +
-            "buildenv\n")
-        docker_target.set_recipe_name("Dockerfile-yandabase-" + machine)
-        docker_target.set_image_name(prepend + machine + append)
-
+        base_part = ("FROM pawsey/mpich-base:3.1.4_ubuntu18.04 AS " +
+            "base_image\n")
+        docker_target.set_recipe_name(".gitlab-docker-yandabase-" + machine)
+        docker_target.set_image_name(prepend + "yandabase:" + machine + append)
     else:
         raise ValueError("Unknown machine target:", machine)
 
-    docker_target.set_recipe(header + base_system_part + common_top_part + 
-        mpi_part + common_bottom_part)
+    docker_target.set_recipe(header + base_part + recipe)
     docker_target.write_recipe()
 
     # If requested, actually generate the image
-    if actual:
+    if execute:
         docker_target.build_image()
     else:  # Otherwise, just echo the command to generate the image
         print(docker_target.get_build_command())
@@ -520,82 +444,157 @@ def make_base_image(machine, mpi, prepend, append, actual):
 
 
 
-def make_final_image(machine, mpi, prepend, append, base_image, actual):
+def make_big_yandasoft_recipe(base_image, git_branch):
     '''
-    Make the final image on top of base image.
+    Make Docker recipe for Yandasoft, which is built from its components.
     '''
-
-    base_part = ("FROM " + base_image + " as buildenv\n")
-
     cmake_cxx_flags = ("-DCMAKE_CXX_FLAGS=\"" + MPI_COMPILE_FLAGS + 
             "\" -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENMP=YES")
-    cmake_build_flags = ("-DBUILD_ANALYSIS=OFF -DBUILD_PIPELINE=OFF -DBUILD_COMPONENTS=OFF " +
+    cmake_build_flags = ("-DBUILD_ANALYSIS=ON -DBUILD_PIPELINE=OFF -DBUILD_COMPONENTS=OFF " +
         "-DBUILD_SERVICES=OFF")
+    recipe = (
+        "# Build Yandasoft\n"
+        "FROM " + base_image + " AS build_image \n"
+        "WORKDIR /home\n"
+        # "RUN git clone https://github.com/ATNF/all_yandasoft.git\n"
+        "RUN git clone https://gitlab.com/ASKAPSDP/all_yandasoft.git\n"
+        "WORKDIR /home/all_yandasoft\n"
+        "RUN ./git-do clone\n"
+        "RUN ./git-do checkout -b " + git_branch + "\n"
+        "# To fix version problem, use develop branch in askap-cmake \n"
+        "WORKDIR /home/all_yandasoft/askap-cmake \n"
+        "RUN git checkout develop \n"
+        "WORKDIR /home/all_yandasoft \n"
+        "RUN mkdir build\n"
+        "WORKDIR /home/all_yandasoft/build\n"
+        "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " " + cmake_build_flags + " .. \\\n"
+        "    && make -j" + str(nproc) + " \\\n"
+        "    && make install\n"
+        # "    && rm -rf * \n"
+        )
+    return recipe
 
-    common_part = (
-    "# Build LOFAR\n"
-    "WORKDIR /usr/local/share\n"
-    "RUN mkdir LOFAR\n"
-    "WORKDIR /usr/local/share/LOFAR\n"
-    "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-common.git\n"
-    "WORKDIR /usr/local/share/LOFAR/lofar-common\n"
-    # "RUN git checkout " + git_branch + "\n"
-    "RUN git checkout develop \n"
-    "RUN mkdir build\n"
-    "WORKDIR /usr/local/share/LOFAR/lofar-common/build\n"
-    "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " .. \\\n"
-    "    && make -j" + str(nproc) + " \\\n"
-    "    && make install\n"
-    "WORKDIR /usr/local/share/LOFAR\n"
-    "RUN git clone https://bitbucket.csiro.au/scm/askapsdp/lofar-blob.git\n"
-    "WORKDIR /usr/local/share/LOFAR/lofar-blob\n"
-    # "RUN git checkout " + git_branch + "\n"
-    "RUN git checkout develop \n"
-    "RUN mkdir build\n"
-    "WORKDIR /usr/local/share/LOFAR/lofar-blob/build\n"
-    "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " .. \\\n"
-    "    && make -j" + str(nproc) + " \\\n"
-    "    && make install\n"
-    "# Build yandasoft\n"
-    "WORKDIR /home\n"
-    # "RUN git clone https://github.com/ATNF/all_yandasoft.git\n"
-    "RUN git clone https://gitlab.com/ASKAPSDP/all_yandasoft.git\n"
-    "WORKDIR /home/all_yandasoft\n"
-    # "RUN git checkout -b " + git_branch + "\n"
-    # "RUN git checkout " + git_branch + "\n"
-    "RUN git checkout develop \n"
-    "RUN ./git-do clone\n"
-    # "RUN ./git-do checkout -b " + git_branch + "\n"
-    "RUN ./git-do checkout " + git_branch + "\n"
-    "RUN mkdir build\n"
-    "WORKDIR /home/all_yandasoft/build\n"
-    "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " " + cmake_build_flags + " .. \\\n"
-    "    && make -j" + str(nproc) + " \\\n"
-    "    && make install\n"
-    )
 
+def make_small_yandasoft_recipe(base_image):
+    '''
+    Make Docker recipe for small image of Yandasoft, which is made by
+    copying the files from big image of Yandasoft.
+    '''
+    recipe_base = (
+        "# Build production image \n"
+        "FROM " + base_image + " AS production_image \n"
+        )
+
+    # Libraries to be installed
+    recipe_library = (
+        "ENV DEBIAN_FRONTEND=\"noninteractive\" \n"
+        "RUN apt-get update -q \\\n"
+        "    && apt-get upgrade -y \\\n"
+        "    && apt-get install -y --no-install-recommends "
+        )
+    for library_item in library_list:
+        recipe_library += " \\\n" + "        " + library_item
+    recipe_library += "\\\n"
+    recipe_library += (
+        "    && apt-get clean all \\\n"
+        "    && rm -rf /var/lib/apt/lists/* \n"
+        )
+
+    recipe_copy = (
+        "# Copy executables and libraries from build_image \n"
+        "COPY --from=build_image /usr/local/bin/* /usr/local/bin/ \n"
+        "COPY --from=build_image /usr/local/lib/* /usr/local/lib/ \n"
+        )
+
+    recipe_data = (
+        "# Build the latest measures \n"
+        "RUN mkdir /usr/local/share/casacore \\\n"
+        "    && mkdir /usr/local/share/casacore/data \n"
+        "WORKDIR /usr/local/share/casacore/data \n"
+        "RUN wget ftp://ftp.astron.nl/outgoing/Measures/WSRT_Measures.ztar \\\n"
+        "    && mv WSRT_Measures.ztar WSRT_Measures.tar.gz \\\n"
+        "    && tar -zxf WSRT_Measures.tar.gz \\\n"
+        "    && rm WSRT_Measures.tar.gz \n"
+        )
+
+    recipe = recipe_base + recipe_library + recipe_copy + recipe_data
+    return recipe
+
+
+
+def make_yandasoft(machine, mpi, prepend, append, git_branch, execute):
+    '''
+    Make Yandasoft recipe and image.
+    '''
+    docker_target = DockerClass()
+    # Make recipe for big image
     if machine == "generic":
-        docker_target = DockerClass()
-        (mpi_type, mpi_num) = get_mpi_type_and_version(mpi)
-        if (isinstance(mpi_num, list)):
-            mpi_name = mpi_type + str(mpi_num[0])
-        else:
-            mpi_name = mpi_type 
-        docker_target.set_recipe_name("Dockerfile-yandasoft-" + mpi_name)
-        docker_target.set_recipe(header + base_part + common_part)
-        docker_target.set_image_name(prepend + mpi_name + append)
-
+        base_image = ("csirocass/yandabase:" + mpi)
     elif (machine == "galaxy"):
-        docker_target = DockerClass()
-        docker_target.set_recipe_name("Dockerfile-yandasoft-" + machine)
-        docker_target.set_recipe(header + base_part + common_part)
-        docker_target.set_image_name(prepend + machine + append)
-
+        base_image = ("csirocass/yandabase:" + machine)
     else:
         raise ValueError("Unknown machine target:", machine)
+    recipe = make_big_yandasoft_recipe(base_image, git_branch)
 
+    if git_branch == "develop":
+        if machine == "generic":
+            docker_target.set_recipe_name(
+                ".gitlab-docker-yandasoft-dev-" + mpi)
+            docker_target.set_image_name(prepend + "yandasoft:dev-" + 
+                mpi + append)
+        elif (machine == "galaxy"):
+            docker_target.set_recipe_name(
+                ".gitlab-docker-yandasoft-dev-" + machine)
+            docker_target.set_image_name(prepend + "yandasoft:dev-" + 
+                machine + append)
+        else:
+            raise ValueError("Unknown machine target:", machine)
+    elif git_branch == "master":
+        if machine == "generic":
+            docker_target.set_recipe_name(
+                ".gitlab-docker-yandasoft-" + mpi)
+            docker_target.set_image_name(prepend + "yandasoft:" + 
+                mpi + append)
+        elif (machine == "galaxy"):
+            docker_target.set_recipe_name(
+                ".gitlab-docker-yandasoft-" + machine)
+            docker_target.set_image_name(prepend + "yandasoft:" + 
+                machine + append)
+        else:
+            raise ValueError("Unknown machine target:", machine)
+    else:
+        # Release tag
+        # Extract MAJOR.MINOR version from the release tag.
+        # TODO: This only works for single digits (eg. 1.2)
+        #       Find a more general method (eg. 12.34).
+        #       Abort if version numbers cannot be extracted.
+        version = git_branch[0:3]
+        if machine == "generic":
+            base_image = ("csirocass/base:" + mpi)
+            docker_target.set_recipe_name(".gitlab-docker-yandasoft-" + 
+                version + "-" + mpi)
+            docker_target.set_image_name(prepend + "yandasoft:" + 
+                version + "-" + mpi + append)
+        elif (machine == "galaxy"):
+            base_image = ("pawsey/mpich-base:3.1.4_ubuntu18.04")
+            docker_target.set_recipe_name(".gitlab-docker-yandasoft-" + 
+                version + "-" + machine)
+            docker_target.set_image_name(prepend + "yandasoft:" + 
+                version + "-" + machine + append)
+        else:
+            raise ValueError("Unknown machine target:", machine)
+        recipe += make_small_yandasoft_recipe(base_image)
+
+
+    recipe_end = (
+        "WORKDIR /home \n"
+        "CMD [\"/bin/bash\"] \n" 
+    )
+    recipe = header + recipe + recipe_end
+    docker_target.set_recipe(recipe)
     docker_target.write_recipe()
-    if actual:
+
+    if execute:
         docker_target.build_image()
     else:
         print(docker_target.get_build_command())
@@ -606,7 +605,7 @@ def make_final_image(machine, mpi, prepend, append, base_image, actual):
 
 def make_batch_file(machine, mpi):
     '''
-    Make sample batch files for SLURN
+    Make sample batch files for SLURM
     '''
 
     batch_common_part = (
@@ -664,63 +663,53 @@ def main():
         description="Make Docker images for various MPI implementations",
         epilog="The targets can be changed from inside the script " +
             "(the SETTINGS section)")
-    parser.add_argument('-b', '--base_image', help='Create base image', 
-        action='store_true')
-    parser.add_argument('-f', '--final_image', help='Create final image', 
-        action='store_true')
-    parser.add_argument('-s', '--show_targets_only', help='Show targets only', 
-        action='store_true')
+    parser.add_argument('image', help='Either "yandabase" or "yandasoft"', type=str)
+    parser.add_argument('-g', '--git_branch', default="master", type=str,
+        help='Possible values: "master" (default), "develop", release tag number (eg. "1.2.3")')
+    parser.add_argument('-x', '--execute', action='store_true',
+        help='Actually create the image. Otherwise only Docker recipe is produced.')
     args = parser.parse_args()
 
-    if args.show_targets_only:
-        show_targets()
-        sys.exit(0)
+    git_branch = args.git_branch
+    image = args.image
 
-    # The common components of image names in DockerHub
-    base_prepend = "csirocass/yandabase:"
-    if git_branch == "release/1.1.0":
-        final_prepend = "csirocass/yandasoft:1.1-"
-    elif git_branch == "master":
-        final_prepend = "csirocass/yandasoft:"
+    if image == "yandabase":
+        if args.execute:
+            print("Making yandabase image")
+        else:
+            print("Making the recipe for yandabase")
+    elif image == "yandasoft":
+        if args.execute:
+            print("Making yandasoft image from git branch", git_branch)
+        else:
+            print("Making the recipe for yandasoft image from git branch", git_branch)
     else:
-        final_prepend = "csirocass/yandasoft:dev-"
-    base_append = ""
-    final_append = ""
+        raise ValueError("Image must be either 'yandabase' or 'yandasoft")
 
-    if args.base_image:
-        print("Making base images ...")
-    else:
-        print("Base image will not be made")
-
-    if args.final_image:
-        print("Making final images ...")
-    else:
-        print("Final image will not be made")
+    name_prepend = docker_account + "/"
+    name_append = ""
 
     for machine in machine_targets:
         if machine == "generic":
             for mpi in mpi_targets:
-                docker = make_base_image(machine, mpi, base_prepend, 
-                    base_append, args.base_image)
-                if docker != None:
-                    docker = make_final_image(machine, mpi, final_prepend, 
-                        final_append, docker.image_name, args.final_image)
-                    if docker == None:
-                        raise ValueError("Failed to make final image:", 
-                            machine, mpi)
+                if image == "yandabase":
+                    docker = make_yandabase(machine, mpi, name_prepend, 
+                        name_append, args.execute)
+                elif image == "yandasoft":
+                    docker = make_yandasoft(machine, mpi, name_prepend, 
+                        name_append, git_branch, args.execute)
                 else:
-                    raise ValueError("Failed to make base image:", machine, mpi)
+                    raise ValueError("Unknown image:", image)
         else:
             # Specific machine
-            docker = make_base_image(machine, None, base_prepend, base_append, 
-                args.base_image)
-            if docker != None:
-                docker = make_final_image(machine, None, final_prepend, 
-                    final_append, docker.image_name, args.final_image)
-                if docker == None:
-                    raise ValueError("Failed to make final image:", machine)
+            if image == "yandabase":
+                docker = make_yandabase(machine, None, name_prepend, 
+                    name_append, args.execute)
+            elif image == "yandasoft":
+                docker = make_yandasoft(machine, machine, name_prepend, 
+                    name_append, git_branch, args.execute)
             else:
-                raise ValueError("Failed to make base image:", machine)
+                raise ValueError("Unknown image:", image)
 
 
 
