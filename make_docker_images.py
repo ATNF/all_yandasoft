@@ -115,6 +115,7 @@ library_list = [
     "libpython2.7-dev", 
     "libpython3-dev", 
     "libreadline-dev",
+    "libssl-dev",
     "libxerces-c-dev",
     "libzmq3-dev",
     "wcslib-dev"
@@ -444,33 +445,65 @@ def make_yandabase(machine, mpi, prepend, append, execute):
 
 
 
-def make_big_yandasoft_recipe(base_image, git_branch):
+def make_big_yandasoft_recipe(base_image, image, git_branch):
     '''
-    Make Docker recipe for Yandasoft, which is built from its components.
+    Make Docker recipe for Yandasoft/ASKAPsoft.
     '''
     cmake_cxx_flags = ("-DCMAKE_CXX_FLAGS=\"" + MPI_COMPILE_FLAGS + 
             "\" -DCMAKE_BUILD_TYPE=Release -DENABLE_OPENMP=YES")
-    cmake_build_flags = ("-DBUILD_ANALYSIS=ON -DBUILD_PIPELINE=OFF -DBUILD_COMPONENTS=OFF " +
-        "-DBUILD_SERVICES=OFF")
-    recipe = (
-        "# Build Yandasoft\n"
-        "FROM " + base_image + " AS build_image \n"
-        "WORKDIR /home\n"
-        # "RUN git clone https://github.com/ATNF/all_yandasoft.git\n"
-        "RUN git clone https://gitlab.com/ASKAPSDP/all_yandasoft.git\n"
-        "WORKDIR /home/all_yandasoft\n"
-        "RUN ./git-do clone\n"
-        "RUN ./git-do checkout -b " + git_branch + "\n"
-        "# To fix version problem, use develop branch in askap-cmake \n"
-        "WORKDIR /home/all_yandasoft/askap-cmake \n"
-        "RUN git checkout develop \n"
-        "WORKDIR /home/all_yandasoft \n"
-        "RUN mkdir build\n"
-        "WORKDIR /home/all_yandasoft/build\n"
-        "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " " + cmake_build_flags + " .. \\\n"
-        "    && make -j" + str(nproc) + " \\\n"
-        "    && make install\n"
-        # "    && rm -rf * \n"
+    if (image == "yandasoft"):
+        cmake_build_flags = ("-DBUILD_ANALYSIS=OFF -DBUILD_PIPELINE=OFF -DBUILD_COMPONENTS=OFF " +
+            "-DBUILD_SERVICES=OFF")
+    elif (image == "askapsoft"):
+        cmake_build_flags = ("-DBUILD_ANALYSIS=ON -DBUILD_PIPELINE=ON -DBUILD_COMPONENTS=ON " +
+            "-DBUILD_SERVICES=OFF")
+    else:
+        raise ValueError("Illegal image name:", image)
+
+    if ((git_branch == "develop") or (git_branch == "master")):
+        recipe = (
+            "# Build Yandasoft\n"
+            "FROM " + base_image + " AS build_image \n"
+            "WORKDIR /home\n"
+            # "RUN git clone https://github.com/ATNF/all_yandasoft.git\n"
+            "RUN git clone https://gitlab.com/ASKAPSDP/all_yandasoft.git\n"
+            "WORKDIR /home/all_yandasoft\n"
+            "RUN ./git-do clone\n"
+            "RUN ./git-do checkout -b " + git_branch + "\n"
+            "# To fix version problem, use develop branch in askap-cmake \n"
+            "WORKDIR /home/all_yandasoft/askap-cmake \n"
+            "RUN git checkout develop \n"
+            "WORKDIR /home/all_yandasoft \n"
+            "RUN mkdir build\n"
+            "WORKDIR /home/all_yandasoft/build\n"
+            "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " " + cmake_build_flags + " .. \\\n"
+            "    && make -j" + str(nproc) + " \\\n"
+            "    && make install\n"
+            # "    && rm -rf * \n"
+        )
+    else:
+        # Workaround for release version
+        recipe = (
+            "# Build Yandasoft\n"
+            "FROM " + base_image + " AS build_image \n"
+            "WORKDIR /home\n"
+            # "RUN git clone https://github.com/ATNF/all_yandasoft.git\n"
+            "RUN git clone https://gitlab.com/ASKAPSDP/all_yandasoft.git\n"
+            "WORKDIR /home/all_yandasoft\n"
+            "RUN ./git-do clone\n"
+            "# Workaround for versioning\n"
+            "RUN ./git-do checkout -b release/" + git_branch + "\n"
+            "RUN ./git-do checkout -b " + git_branch + "\n"
+            "# To fix version problem, use develop branch in askap-cmake \n"
+            "WORKDIR /home/all_yandasoft/askap-cmake \n"
+            "RUN git checkout develop \n"
+            "WORKDIR /home/all_yandasoft \n"
+            "RUN mkdir build\n"
+            "WORKDIR /home/all_yandasoft/build\n"
+            "RUN cmake " + cmake_cxx_compiler + " " + cmake_cxx_flags + " " + cmake_build_flags + " .. \\\n"
+            "    && make -j" + str(nproc) + " \\\n"
+            "    && make install\n"
+            # "    && rm -rf * \n"
         )
     return recipe
 
@@ -522,7 +555,7 @@ def make_small_yandasoft_recipe(base_image):
 
 
 
-def make_yandasoft(machine, mpi, prepend, append, git_branch, execute):
+def make_yandasoft(machine, mpi, prepend, append, git_branch, image, execute):
     '''
     Make Yandasoft recipe and image.
     '''
@@ -534,31 +567,39 @@ def make_yandasoft(machine, mpi, prepend, append, git_branch, execute):
         base_image = ("csirocass/yandabase:" + machine)
     else:
         raise ValueError("Unknown machine target:", machine)
-    recipe = make_big_yandasoft_recipe(base_image, git_branch)
+    recipe = make_big_yandasoft_recipe(base_image, image, git_branch)
 
     if git_branch == "develop":
         if machine == "generic":
             docker_target.set_recipe_name(
-                ".gitlab-docker-yandasoft-dev-" + mpi)
-            docker_target.set_image_name(prepend + "yandasoft:dev-" + 
+                ".gitlab-docker-" + image + "-dev-" + mpi)
+                # ".gitlab-docker-yandasoft-dev-" + mpi)
+            # docker_target.set_image_name(prepend + "yandasoft:dev-" + 
+            docker_target.set_image_name(prepend + image + ":dev-" + 
                 mpi + append)
         elif (machine == "galaxy"):
             docker_target.set_recipe_name(
-                ".gitlab-docker-yandasoft-dev-" + machine)
-            docker_target.set_image_name(prepend + "yandasoft:dev-" + 
+                ".gitlab-docker-" + image + "-dev-" + machine)
+                # ".gitlab-docker-yandasoft-dev-" + machine)
+            # docker_target.set_image_name(prepend + "yandasoft:dev-" + 
+            docker_target.set_image_name(prepend + image + ":dev-" + 
                 machine + append)
         else:
             raise ValueError("Unknown machine target:", machine)
     elif git_branch == "master":
         if machine == "generic":
             docker_target.set_recipe_name(
-                ".gitlab-docker-yandasoft-" + mpi)
-            docker_target.set_image_name(prepend + "yandasoft:" + 
+                ".gitlab-docker-" + image + "-" + mpi)
+                # ".gitlab-docker-yandasoft-" + mpi)
+            # docker_target.set_image_name(prepend + "yandasoft:" + 
+            docker_target.set_image_name(prepend + image + ":" + 
                 mpi + append)
         elif (machine == "galaxy"):
             docker_target.set_recipe_name(
-                ".gitlab-docker-yandasoft-" + machine)
-            docker_target.set_image_name(prepend + "yandasoft:" + 
+                ".gitlab-docker-" + image + "-" + machine)
+                # ".gitlab-docker-yandasoft-" + machine)
+            # docker_target.set_image_name(prepend + "yandasoft:" + 
+            docker_target.set_image_name(prepend + image + ":" + 
                 machine + append)
         else:
             raise ValueError("Unknown machine target:", machine)
@@ -571,15 +612,19 @@ def make_yandasoft(machine, mpi, prepend, append, git_branch, execute):
         version = git_branch[0:3]
         if machine == "generic":
             base_image = ("csirocass/base:" + mpi)
-            docker_target.set_recipe_name(".gitlab-docker-yandasoft-" + 
+            # docker_target.set_recipe_name(".gitlab-docker-yandasoft-" + 
+            docker_target.set_recipe_name(".gitlab-docker-" + image + "-" + 
                 version + "-" + mpi)
-            docker_target.set_image_name(prepend + "yandasoft:" + 
+            # docker_target.set_image_name(prepend + "yandasoft:" + 
+            docker_target.set_image_name(prepend + image + ":" + 
                 version + "-" + mpi + append)
         elif (machine == "galaxy"):
             base_image = ("pawsey/mpich-base:3.1.4_ubuntu18.04")
-            docker_target.set_recipe_name(".gitlab-docker-yandasoft-" + 
+            # docker_target.set_recipe_name(".gitlab-docker-yandasoft-" + 
+            docker_target.set_recipe_name(".gitlab-docker-" + image + "-" + 
                 version + "-" + machine)
-            docker_target.set_image_name(prepend + "yandasoft:" + 
+            # docker_target.set_image_name(prepend + "yandasoft:" + 
+            docker_target.set_image_name(prepend + image + ":" + 
                 version + "-" + machine + append)
         else:
             raise ValueError("Unknown machine target:", machine)
@@ -663,7 +708,7 @@ def main():
         description="Make Docker images for various MPI implementations",
         epilog="The targets can be changed from inside the script " +
             "(the SETTINGS section)")
-    parser.add_argument('image', help='Either "yandabase" or "yandasoft"', type=str)
+    parser.add_argument('image', help='"yandabase" or "yandasoft" or "askapsoft"', type=str)
     parser.add_argument('-g', '--git_branch', default="master", type=str,
         help='Possible values: "master" (default), "develop", release tag number (eg. "1.2.3")')
     parser.add_argument('-x', '--execute', action='store_true',
@@ -683,6 +728,11 @@ def main():
             print("Making yandasoft image from git branch", git_branch)
         else:
             print("Making the recipe for yandasoft image from git branch", git_branch)
+    elif image == "askapsoft":
+        if args.execute:
+            print("Making askapsoft image from git branch", git_branch)
+        else:
+            print("Making the recipe for askapsoft image from git branch", git_branch)
     else:
         raise ValueError("Image must be either 'yandabase' or 'yandasoft")
 
@@ -695,9 +745,9 @@ def main():
                 if image == "yandabase":
                     docker = make_yandabase(machine, mpi, name_prepend, 
                         name_append, args.execute)
-                elif image == "yandasoft":
+                elif ((image == "yandasoft") or (image == "askapsoft")):
                     docker = make_yandasoft(machine, mpi, name_prepend, 
-                        name_append, git_branch, args.execute)
+                        name_append, git_branch, image, args.execute)
                 else:
                     raise ValueError("Unknown image:", image)
         else:
@@ -705,9 +755,9 @@ def main():
             if image == "yandabase":
                 docker = make_yandabase(machine, None, name_prepend, 
                     name_append, args.execute)
-            elif image == "yandasoft":
+            elif ((image == "yandasoft") or (image == "askapsoft")):
                 docker = make_yandasoft(machine, machine, name_prepend, 
-                    name_append, git_branch, args.execute)
+                    name_append, git_branch, image, args.execute)
             else:
                 raise ValueError("Unknown image:", image)
 
