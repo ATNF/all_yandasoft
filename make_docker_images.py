@@ -25,13 +25,14 @@
 # Currently, we target generic HPCs and a specific HPC: Galaxy.
 # When a specific machine target is chosen, MPI target is ignored.
 # Choose one or both of this list of target.
-# machine_targets = ["generic", "galaxy"]
-machine_targets = ["generic"]
+machine_targets = ["generic", "galaxy"]
+# machine_targets = ["generic"]
 
 # Set MPI implementations for generic machine in the list below.
 # Note that a specific machine requires no MPI specification.
 # Choose a subset (or all) of this complete list of targets:
 mpi_targets = ["mpich", "openmpi4", "openmpi3", "openmpi2", "openmpi2.0"]
+# mpi_targets = ["openmpi4"]
 
 cmake_ver = "3.20.3"
 
@@ -209,19 +210,20 @@ class DockerClass:
             with open(self.recipe_name, "w") as file:
                 file.write(self.recipe)
 
-    def get_build_command(self):
+    def get_build_command(self, ssh_key_path):
         '''Return build command'''
         if (self.recipe_name == ""):
             raise ValueError("Docker recipe file name has not been set")
         elif (self.image_name == ""):
             raise ValueError("Docker image file name has not been set")
         else:
-            return ("docker build --no-cache --pull -t " + self.image_name + " -f " + 
-                self.recipe_name + " .")
+            return ("docker build --no-cache --pull -t " + self.image_name + 
+                " --build-arg SSH_KEY_PATH=\"" + ssh_key_path + "\"" +
+                " -f " + self.recipe_name + " .")
          
-    def build_image(self):
+    def build_image(self, ssh_key_path):
         '''Build the Docker image'''
-        build_command = self.get_build_command()
+        build_command = self.get_build_command(ssh_key_path)
         if (self.recipe_name == ""):
             raise ValueError("Docker recipe file name has not been set")
         else:
@@ -259,6 +261,29 @@ def compose_version_number(int_list):
             return ""
     else:
         return ""
+
+
+def convert_ssh_key_to_single_line(ssh_key):
+    '''
+    Convert SSH key of RSA type in multi-line format into single line
+    '''
+    # print("convert_ssh_key_to_single_line")
+    multi_lines = ssh_key.splitlines()
+    # print(multi_lines[0])
+    content = ""
+    for line in multi_lines:
+        # print(line)
+        # print(line[0:7])
+        if line[0:6] == "-----B":
+            first_line = line
+        elif line[0:6] == "-----E":
+            last_line = line
+        else:
+            content += line
+    # content.strip()
+    # print("Single line:", single_line)
+    single_line = first_line + "\n" + content + "\n" + last_line
+    return single_line
 
 
 def get_mpi_type_and_version(mpi_name):
@@ -456,19 +481,31 @@ def make_big_yandasoft_recipe(base_image, image, git_branch):
             "-DBUILD_SERVICES=OFF")
     elif (image == "askapsoft"):
         cmake_build_flags = ("-DBUILD_ANALYSIS=ON -DBUILD_PIPELINE=ON -DBUILD_COMPONENTS=ON " +
-            "-DBUILD_SERVICES=OFF")
+            "-DBUILD_SERVICES=ON")
     else:
         raise ValueError("Illegal image name:", image)
 
+    recipe = (
+        "# Build big image \n"
+        "FROM " + base_image + " AS build_image \n"
+        "RUN apt-get update \n"
+        "RUN apt-get install openssh-server -y \n"
+        "# Git credential \n"
+        "ARG SSH_KEY_PATH \n"
+        "RUN mkdir /root/.ssh/ \n"
+        "COPY ${SSH_KEY_PATH}/id_rsa /root/.ssh/id_rsa \n"
+        "COPY ${SSH_KEY_PATH}/known_hosts /root/.ssh/known_hosts \n"
+        # "RUN ls /root/.ssh \n"
+        # "RUN cat /root/.ssh/id_rsa \n"
+        # "RUN cat /root/.ssh/known_hosts \n"
+        "WORKDIR /home \n"
+        "RUN git clone https://gitlab.com/ASKAPSDP/all_yandasoft.git \n"
+        "WORKDIR /home/all_yandasoft \n"
+        "RUN ./git-do clone -m ssh \n"
+    )
+
     if ((git_branch == "develop") or (git_branch == "master")):
-        recipe = (
-            "# Build Yandasoft\n"
-            "FROM " + base_image + " AS build_image \n"
-            "WORKDIR /home\n"
-            # "RUN git clone https://github.com/ATNF/all_yandasoft.git\n"
-            "RUN git clone https://gitlab.com/ASKAPSDP/all_yandasoft.git\n"
-            "WORKDIR /home/all_yandasoft\n"
-            "RUN ./git-do clone\n"
+        recipe += (
             "RUN ./git-do checkout -b " + git_branch + "\n"
             "# To fix version problem, use develop branch in askap-cmake \n"
             "WORKDIR /home/all_yandasoft/askap-cmake \n"
@@ -483,14 +520,7 @@ def make_big_yandasoft_recipe(base_image, image, git_branch):
         )
     else:
         # Workaround for release version
-        recipe = (
-            "# Build Yandasoft\n"
-            "FROM " + base_image + " AS build_image \n"
-            "WORKDIR /home\n"
-            # "RUN git clone https://github.com/ATNF/all_yandasoft.git\n"
-            "RUN git clone https://gitlab.com/ASKAPSDP/all_yandasoft.git\n"
-            "WORKDIR /home/all_yandasoft\n"
-            "RUN ./git-do clone\n"
+        recipe += (
             "# Workaround for versioning\n"
             "RUN ./git-do checkout -b release/" + git_branch + "\n"
             "RUN ./git-do checkout -b " + git_branch + "\n"
@@ -555,7 +585,7 @@ def make_small_yandasoft_recipe(base_image):
 
 
 
-def make_yandasoft(machine, mpi, prepend, append, git_branch, image, execute):
+def make_yandasoft(machine, mpi, prepend, append, git_branch, image, ssh_key_path, execute):
     '''
     Make Yandasoft recipe and image.
     '''
@@ -640,9 +670,9 @@ def make_yandasoft(machine, mpi, prepend, append, git_branch, image, execute):
     docker_target.write_recipe()
 
     if execute:
-        docker_target.build_image()
+        docker_target.build_image(ssh_key_path)
     else:
-        print(docker_target.get_build_command())
+        print(docker_target.get_build_command(ssh_key_path))
 
     return docker_target
 
@@ -709,6 +739,7 @@ def main():
         epilog="The targets can be changed from inside the script " +
             "(the SETTINGS section)")
     parser.add_argument('image', help='"yandabase" or "yandasoft" or "askapsoft"', type=str)
+    parser.add_argument('ssh_key_path', help='Path to SSH private key (id_rsa) and known_hosts', type=str)
     parser.add_argument('-g', '--git_branch', default="master", type=str,
         help='Possible values: "master" (default), "develop", release tag number (eg. "1.2.3")')
     parser.add_argument('-x', '--execute', action='store_true',
@@ -734,7 +765,7 @@ def main():
         else:
             print("Making the recipe for askapsoft image from git branch", git_branch)
     else:
-        raise ValueError("Image must be either 'yandabase' or 'yandasoft")
+        raise ValueError("Image name must be one of these: yandabase, yandasoft, askapsoft")
 
     name_prepend = docker_account + "/"
     name_append = ""
@@ -747,7 +778,7 @@ def main():
                         name_append, args.execute)
                 elif ((image == "yandasoft") or (image == "askapsoft")):
                     docker = make_yandasoft(machine, mpi, name_prepend, 
-                        name_append, git_branch, image, args.execute)
+                        name_append, git_branch, image, args.ssh_key_path, args.execute)
                 else:
                     raise ValueError("Unknown image:", image)
         else:
@@ -757,7 +788,7 @@ def main():
                     name_append, args.execute)
             elif ((image == "yandasoft") or (image == "askapsoft")):
                 docker = make_yandasoft(machine, machine, name_prepend, 
-                    name_append, git_branch, image, args.execute)
+                    name_append, git_branch, image, args.ssh_key_path, args.execute)
             else:
                 raise ValueError("Unknown image:", image)
 
