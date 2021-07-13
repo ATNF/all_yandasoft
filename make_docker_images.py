@@ -25,14 +25,14 @@
 # Currently, we target generic HPCs and a specific HPC: Galaxy.
 # When a specific machine target is chosen, MPI target is ignored.
 # Choose one or both of this list of target.
-machine_targets = ["generic", "galaxy"]
-# machine_targets = ["generic"]
+# machine_targets = ["generic", "galaxy"]
+machine_targets = ["generic"]
 
 # Set MPI implementations for generic machine in the list below.
 # Note that a specific machine requires no MPI specification.
 # Choose a subset (or all) of this complete list of targets:
-mpi_targets = ["mpich", "openmpi4", "openmpi3", "openmpi2", "openmpi2.0"]
-# mpi_targets = ["openmpi4"]
+# mpi_targets = ["mpich", "openmpi4", "openmpi3", "openmpi2", "openmpi2.0"]
+mpi_targets = ["mpich"]
 
 cmake_ver = "3.20.3"
 
@@ -176,14 +176,14 @@ class DockerClass:
     image_name = ""
     recipe = ""
 
-    def set_recipe_name(self, recipe_name):
+    def set_recipe_name(self, recipe_name) -> None:
         '''Set Dockerfile name'''
         if is_proper_name(recipe_name):
             self.recipe_name = recipe_name
         else:
             raise ValueError("Illegal recipe_name:", recipe_name)
 
-    def set_recipe(self, recipe):
+    def set_recipe(self, recipe) -> None:
         '''Set the content of Dockerfile'''
         if type(recipe) == str:
             if recipe != "":
@@ -193,14 +193,14 @@ class DockerClass:
         else:
             raise TypeError("Recipe is not string")
 
-    def set_image_name(self, image_name):
+    def set_image_name(self, image_name) -> None:
         '''Set Docker image name'''
         if is_proper_name(image_name):
             self.image_name = image_name
         else:
             raise ValueError("Illegal image_name:", image_name)
 
-    def write_recipe(self):
+    def write_recipe(self) -> None:
         '''Write recipe into Dockerfile'''
         if self.recipe_name == "":
             raise ValueError("Docker recipe file name has not been set")
@@ -210,7 +210,7 @@ class DockerClass:
             with open(self.recipe_name, "w") as file:
                 file.write(self.recipe)
 
-    def get_build_command(self, ssh_key_path):
+    def get_build_command(self, ssh_key_path) -> str:
         '''Return build command'''
         if (self.recipe_name == ""):
             raise ValueError("Docker recipe file name has not been set")
@@ -221,7 +221,7 @@ class DockerClass:
                 " --build-arg SSH_KEY_PATH=\"" + ssh_key_path + "\"" +
                 " -f " + self.recipe_name + " .")
          
-    def build_image(self, ssh_key_path):
+    def build_image(self, ssh_key_path) -> None:
         '''Build the Docker image'''
         build_command = self.get_build_command(ssh_key_path)
         if (self.recipe_name == ""):
@@ -237,7 +237,7 @@ class DockerClass:
 
 
 
-def split_version_number(input_ver):
+def split_version_number(input_ver) -> list:
     '''
     Split a given version number in string into 3 integers.
     '''
@@ -249,7 +249,7 @@ def split_version_number(input_ver):
         return []
 
 
-def compose_version_number(int_list):
+def compose_version_number(int_list) -> str:
     '''
     Given a list of 3 integers, compose version number as a string.
     '''
@@ -263,7 +263,7 @@ def compose_version_number(int_list):
         return ""
 
 
-def convert_ssh_key_to_single_line(ssh_key):
+def convert_ssh_key_to_single_line(ssh_key) -> str:
     '''
     Convert SSH key of RSA type in multi-line format into single line
     '''
@@ -470,7 +470,7 @@ def make_yandabase(machine, mpi, prepend, append, execute):
 
 
 
-def make_big_yandasoft_recipe(base_image, image, git_branch):
+def make_big_yandasoft_recipe(base_image, image, git_branch) -> str:
     '''
     Make Docker recipe for Yandasoft/ASKAPsoft.
     '''
@@ -535,6 +535,11 @@ def make_big_yandasoft_recipe(base_image, image, git_branch):
             "    && make install\n"
             # "    && rm -rf * \n"
         )
+
+    recipe += (
+        "# Remove SSH key \n"
+        "RUN rm -rf /root/.ssh/* \n" 
+    )
     return recipe
 
 
